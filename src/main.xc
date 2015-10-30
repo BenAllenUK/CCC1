@@ -47,11 +47,23 @@ void DataInStream(char infname[], chanend c_out)
   //Read image line-by-line and send byte by byte to channel c_out
   for( int y = 0; y < IMHT; y++ ) {
     _readinline( line, IMWD );
-    for( int x = 0; x < IMWD; x++ ) {
-      c_out <: line[ x ];
-      printf( "-%4.1d ", line[ x ] ); //show image values
+    for( int x = 0; x < IMWD; x += 8 ) {
+        uchar linePart = 0;
+        for( int z = 0; z < 8; z++){
+           if(line[x + z] == 255){
+               linePart += 1 << 8 - z;
+           }
+        }
+        c_out <: linePart;
+        for (int i = 0; i < 8; i++) {
+            //  printf("%d", !!((linePart << i) & 0x80));
+        }
+       // printf( " " );
     }
-    printf( "\n" );
+    for(int a = 0; a < IMWD; a++){
+        //printf( "-%4.1d ", line[ a ] ); //show image values
+    }
+    //printf( "\n" );
   }
 
   //Close PGM image file
@@ -81,8 +93,9 @@ void distributor(chanend c_in, chanend c_out, chanend fromAcc)
   //change the image according to the "Game of Life"
   printf( "Processing...\n" );
   for( int y = 0; y < IMHT; y++ ) {   //go through all lines
-    for( int x = 0; x < IMWD; x++ ) { //go through each pixel per line
+    for( int x = 0; x < IMWD; x += 8 ) { //go through each pixel per line
       c_in :> val;                    //read the pixel value
+
       c_out <: (uchar)( val ^ 0xFF ); //send some modified pixel out
     }
   }
@@ -109,9 +122,20 @@ void DataOutStream(char outfname[], chanend c_in)
 
   //Compile each line of the image and write the image line-by-line
   for( int y = 0; y < IMHT; y++ ) {
-    for( int x = 0; x < IMWD; x++ ) {
-      c_in :> line[ x ];
+    for( int x = 0; x < IMWD; x += 8 ) {
+        uchar linePart;
+        c_in :> linePart;
+        for( int z = 0; z < 8; z++){
+            uchar newChar = (uchar)0;
+            if(((linePart >> (7 - z)) & 1) == 1){
+                newChar = (uchar)(255);
+            }
+            line[x + z] = newChar;
+            printf( "-%4.1d ", newChar );
+        }
+        printf( " " );
     }
+    printf( "\n" );
     _writeoutline( line, IMWD );
   }
 
@@ -156,7 +180,7 @@ void accelerometer(client interface i2c_master_if i2c, chanend toDist) {
 
     //send signal to distributor after first tilt
     if (!tilted) {
-      if (x>30) {
+      if (x>10) {
         tilted = 1 - tilted;
         toDist <: 1;
       }
