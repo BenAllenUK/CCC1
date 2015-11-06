@@ -26,6 +26,10 @@ port p_sda = XS1_PORT_1F;
 #define FXOS8700EQ_OUT_Z_MSB 0x5
 #define FXOS8700EQ_OUT_Z_LSB 0x6
 
+typedef interface FinishedInterface {
+    void hasFinished(int resultId, char resultData);
+} FinishedInterface;
+
 /////////////////////////////////////////////////////////////////////////////////////////
 //
 // Read Image from PGM file from path infname[] to channel c_out
@@ -55,15 +59,8 @@ void DataInStream(char infname[], chanend c_out)
            }
         }
         c_out <: linePart;
-        for (int i = 0; i < 8; i++) {
-            //  printf("%d", !!((linePart << i) & 0x80));
-        }
-       // printf( " " );
+
     }
-    for(int a = 0; a < IMWD; a++){
-        //printf( "-%4.1d ", line[ a ] ); //show image values
-    }
-    //printf( "\n" );
   }
 
   //Close PGM image file
@@ -82,6 +79,7 @@ void DataInStream(char infname[], chanend c_out)
 void distributor(chanend c_in, chanend c_out, chanend fromAcc)
 {
   uchar val;
+  uchar grid[IMHT][IMWD / 8];
 
   //Starting up and wait for tilting of the xCore-200 Explorer
   printf( "ProcessImage:Start, size = %dx%d\n", IMHT, IMWD );
@@ -96,10 +94,32 @@ void distributor(chanend c_in, chanend c_out, chanend fromAcc)
     for( int x = 0; x < IMWD; x += 8 ) { //go through each pixel per line
       c_in :> val;                    //read the pixel value
 
-      c_out <: (uchar)( val ^ 0xFF ); //send some modified pixel out
+      grid[y][x] = val;
+
+      //c_out <: (uchar)( val ^ 0xFF ); //send some modified pixel out
     }
   }
   printf( "\nOne processing round completed...\n" );
+
+  interface FinishedInterface finishedInterface;
+  par (int i = 0; i < 10; i++){
+      initWorker(finishedInterface, grid[i-1 % 16], grid[i], grid[i+1 % 16]);
+  }
+
+  int idle = workerNum;
+  int lineCountNum = 0;
+  while(true){
+      cWorker :> (resultId, resultData);
+      grid[resultId] = resultData;
+      if(lineCountNum < IMHT){
+          cWorker <: (lineCountNum, grid[lineCountNum]);
+          lineCountNum++;
+      }
+  }
+
+}
+void initWorker(chanend cWorker, chanend cGenerator, int workerNum){
+
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////
