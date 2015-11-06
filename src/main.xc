@@ -27,7 +27,7 @@ port p_sda = XS1_PORT_1F;
 #define FXOS8700EQ_OUT_Z_LSB 0x6
 
 typedef interface FinishedInterface {
-    void hasFinished(int resultId, char resultData);
+    (int, uchar[], uchar[], uchar[]) hasFinished(int resultId, uchar[] resultData);
 } FinishedInterface;
 
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -102,24 +102,54 @@ void distributor(chanend c_in, chanend c_out, chanend fromAcc)
   printf( "\nOne processing round completed...\n" );
 
   interface FinishedInterface finishedInterface;
+  initServer(finishedInterface, grid);
   par (int i = 0; i < 10; i++){
-      initWorker(finishedInterface, grid[i-1 % 16], grid[i], grid[i+1 % 16]);
+      initWorker(i, finishedInterface, grid[i-1 % 16], grid[i], grid[i+1 % 16]);
   }
 
-  int idle = workerNum;
-  int lineCountNum = 0;
-  while(true){
-      cWorker :> (resultId, resultData);
-      grid[resultId] = resultData;
-      if(lineCountNum < IMHT){
-          cWorker <: (lineCountNum, grid[lineCountNum]);
-          lineCountNum++;
-      }
-  }
+
 
 }
-void initWorker(chanend cWorker, chanend cGenerator, int workerNum){
+void initServer(server FinishedInterface serverInterface, uchar grid[][]){
+    uchar alteredGrid[IMHT][IMWD / 8];
+    int linesReceived = 0, lineToSend = 9;
+    while(true){
+        select {
+            case serverInterface.hasFinished(int id, uchar result[]):
+                alteredGrid[id] = result;
 
+                // Check for finish
+                linesReceived++;
+                if(linesReceived == IMHT){
+                    // Finished this cycle
+                    printf("Finished Cycle");
+//                    return (-1, null, null, null);
+                    break;
+                } else if(lineToSend == IMHT) {
+                    // Do nothing
+                    printf("All lines sent");
+                    return (-1, null, null, null);
+                } else {
+                    lineToSend++;
+                    printf("New Worker %d", lineToSend);
+                    return (lineToSend, grid[lineToSend - 1 % 16], grid[lineToSend % 16], grid[lineToSend % 16]);
+                }
+            break;
+
+        }
+    }
+}
+void initWorker(int id, client FinishedInterface clientInterface, uchar startLine[], uchar midLine[], uchar endLine[]){
+
+    while(true){
+        // do calculationsss...
+
+
+        (id, startLine, midLine, endLine) = clientInterface.hasFinished(id, result);
+        if (id == -1){
+            break;
+        }
+    }
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////
