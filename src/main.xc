@@ -55,7 +55,7 @@ void DataInStream(char infname[], chanend c_out)
         uchar linePart = 0;
         for( int z = 0; z < 8; z++){
            if(line[x + z] == 255){
-               linePart += 1 << 8 - z;
+               linePart += 1 << (7 - z);
            }
         }
         c_out <: linePart;
@@ -140,12 +140,39 @@ void initServer(server FinishedInterface serverInterface, uchar grid[][]){
     }
 }
 void initWorker(int id, client FinishedInterface clientInterface, uchar startLine[], uchar midLine[], uchar endLine[]){
-
+    uchar newLine[IMWD];
+    for(int x = 0; x<IMWD/8; x++){
+        newLine[x] = 0;
+    }
     while(true){
         // do calculationsss...
+        for(int x = 0; x<IMWD; x++)
+        {
+            int l = (x-1) % IMWD;
+            int r = (x+1) % IMWD;
+            int neighbours =
+              ((midline[l/8] >> (7 - (l%8)) ) && 1)
+            + ((midline[r/8] >> (7 - (r%8)) ) && 1)
+            + ((startLine[l/8] >> (7 - (l%8)) ) && 1)
+            + ((startLine[r/8] >> (7 - (r%8)) ) && 1)
+            + ((startLine[x/8] >> (7 - (x%8)) ) && 1)
+            + ((endLine[l/8] >> (7 - (l%8)) ) && 1)
+            + ((endLine[r/8] >> (7 - (r%8)) ) && 1)
+            + ((endLine[x/8] >> (7 - (x%8)) ) && 1);
+            //x living
+            int living = ((midline[x/8] >> (7 - (x)) ) && 1);
+            if(living){
+                if(neighbours==2 || neighbours==3){
+                   newLine[x/8] += (1 << (7-x));
+                }
+            }else if(!(living)){
+                if(neighbours == 3){
+                    newLine[x/8] += (1 << (7-x));
+                }
+            }
+        }
 
-
-        (id, startLine, midLine, endLine) = clientInterface.hasFinished(id, result);
+        (id, startLine, midLine, endLine) = clientInterface.hasFinished(id, newLine);
         if (id == -1){
             break;
         }
