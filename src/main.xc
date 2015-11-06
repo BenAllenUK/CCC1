@@ -27,8 +27,13 @@ port p_sda = XS1_PORT_1F;
 #define FXOS8700EQ_OUT_Z_LSB 0x6
 
 typedef interface FinishedInterface {
-    (int, uchar[], uchar[], uchar[]) hasFinished(int resultId, uchar[] resultData);
+    {int, uchar[IMWD / 8], uchar[IMWD / 8], uchar[IMWD / 8]} hasFinished(int resultId, uchar resultData[IMWD / 8]);
 } FinishedInterface;
+
+void initServer(server FinishedInterface serverInterface, uchar grid[IMHT][IMWD / 8]);
+void initWorker(int id, client FinishedInterface clientInterface, uchar startLine[IMWD / 8], uchar midLine[IMWD / 8], uchar endLine[IMWD / 8]);
+
+
 
 /////////////////////////////////////////////////////////////////////////////////////////
 //
@@ -110,12 +115,13 @@ void distributor(chanend c_in, chanend c_out, chanend fromAcc)
 
 
 }
-void initServer(server FinishedInterface serverInterface, uchar grid[][]){
+void initServer(server FinishedInterface serverInterface, uchar grid[IMHT][IMWD / 8]){
     uchar alteredGrid[IMHT][IMWD / 8];
     int linesReceived = 0, lineToSend = 9;
-    while(true){
+    int started = 1;
+    while(started){
         select {
-            case serverInterface.hasFinished(int id, uchar result[]):
+            case serverInterface.hasFinished(int id, uchar result[IMWD / 8]):
                 alteredGrid[id] = result;
 
                 // Check for finish
@@ -123,8 +129,8 @@ void initServer(server FinishedInterface serverInterface, uchar grid[][]){
                 if(linesReceived == IMHT){
                     // Finished this cycle
                     printf("Finished Cycle");
-//                    return (-1, null, null, null);
-                    break;
+                    return (-1, null, null, null);
+
                 } else if(lineToSend == IMHT) {
                     // Do nothing
                     printf("All lines sent");
@@ -139,12 +145,13 @@ void initServer(server FinishedInterface serverInterface, uchar grid[][]){
         }
     }
 }
-void initWorker(int id, client FinishedInterface clientInterface, uchar startLine[], uchar midLine[], uchar endLine[]){
-    uchar newLine[IMWD];
+void initWorker(int id, client FinishedInterface clientInterface, uchar startLine[IMWD / 8], uchar midLine[IMWD / 8], uchar endLine[IMWD / 8]){
+    uchar newLine[IMWD / 8];
     for(int x = 0; x<IMWD/8; x++){
         newLine[x] = 0;
     }
-    while(true){
+    int started = 1;
+    while(started){
         // do calculationsss...
         for(int x = 0; x<IMWD; x++)
         {
@@ -172,7 +179,7 @@ void initWorker(int id, client FinishedInterface clientInterface, uchar startLin
             }
         }
 
-        (id, startLine, midLine, endLine) = clientInterface.hasFinished(id, newLine);
+        {id, startLine, midLine, endLine} = clientInterface.hasFinished(id, newLine);
         if (id == -1){
             break;
         }
