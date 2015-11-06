@@ -112,9 +112,12 @@ void distributor(chanend c_in, chanend c_out, chanend fromAcc)
   interface FinishedInterface finishedInterfaces[NUMCPUs];
   chan workerChans[NUMCPUs];
   int linesReceived = 0, lineToSend = 0;
-  initServer(finishedInterfaces, workerChans, grid, &linesReceived, &lineToSend);
-  par (int i = 0; i < NUMCPUs; i++){
-      initWorker(i,i, workerChans[i], finishedInterfaces[i]);
+  par{
+      initServer(finishedInterfaces, workerChans, grid, &linesReceived, &lineToSend);
+
+      par (int i = 0; i < NUMCPUs; i++){
+          initWorker(i,i, workerChans[i], finishedInterfaces[i]);
+      }
   }
 
   for(int i = 0; i < NUMCPUs; i++){
