@@ -9,6 +9,7 @@
 
 #define  IMHT 16                  //image height
 #define  IMWD 16                  //image width
+#define  NUMCPUs 10
 
 typedef unsigned char uchar;      //using uchar as shorthand
 
@@ -27,11 +28,13 @@ port p_sda = XS1_PORT_1F;
 #define FXOS8700EQ_OUT_Z_LSB 0x6
 
 typedef interface FinishedInterface {
-    {int, uchar[IMWD / 8], uchar[IMWD / 8], uchar[IMWD / 8]} hasFinished(int resultId, uchar resultData[IMWD / 8]);
+    void hasFinished();
 } FinishedInterface;
 
-void initServer(server FinishedInterface serverInterface, uchar grid[IMHT][IMWD / 8]);
-void initWorker(int id, client FinishedInterface clientInterface, uchar startLine[IMWD / 8], uchar midLine[IMWD / 8], uchar endLine[IMWD / 8]);
+void initServer(server FinishedInterface serverInterface[NUMCPUs], chanend workers[NUMCPUs], uchar grid[IMHT][IMWD / 8], int* linesReceived, int* lineToSend);
+void initWorker(int CPUId, int lineId, chanend c, client FinishedInterface clientInterface);
+void dealWithIt(chanend c, uchar alteredGrid[IMHT][IMWD / 8], uchar grid[IMHT][IMWD / 8], int* linesReceived, int* lineToSend);
+
 
 
 
@@ -84,7 +87,7 @@ void DataInStream(char infname[], chanend c_out)
 void distributor(chanend c_in, chanend c_out, chanend fromAcc)
 {
   uchar val;
-  uchar grid[IMHT][IMWD / 8];
+  uchar static grid[IMHT][IMWD / 8];
 
   //Starting up and wait for tilting of the xCore-200 Explorer
   printf( "ProcessImage:Start, size = %dx%d\n", IMHT, IMWD );
@@ -106,60 +109,94 @@ void distributor(chanend c_in, chanend c_out, chanend fromAcc)
   }
   printf( "\nOne processing round completed...\n" );
 
-  interface FinishedInterface finishedInterface;
-  initServer(finishedInterface, grid);
-  par (int i = 0; i < 10; i++){
-      initWorker(i, finishedInterface, grid[i-1 % 16], grid[i], grid[i+1 % 16]);
+  interface FinishedInterface finishedInterfaces[NUMCPUs];
+  chan workerChans[NUMCPUs];
+  int linesReceived = 0, lineToSend = 0;
+  initServer(finishedInterfaces, workerChans, grid, &linesReceived, &lineToSend);
+  par (int i = 0; i < NUMCPUs; i++){
+      initWorker(i,i, workerChans[i], finishedInterfaces[i]);
+  }
+
+  for(int i = 0; i < NUMCPUs; i++){
+      lineToSend++;
+      printf("New Task %d", lineToSend);
+      workerChans[i] <: lineToSend;
+      for(int x = 0; x < IMWD / 8; x++){
+          workerChans[i] <: grid[(lineToSend - 1 ) % 16][x];
+      }
+      for(int x = 0; x < IMWD / 8; x++){
+          workerChans[i] <: grid[(lineToSend) % 16][x];
+      }
+      for(int x = 0; x < IMWD / 8; x++){
+          workerChans[i] <: grid[(lineToSend + 1 ) % 16][x];
+      }
   }
 
 
-
 }
-void initServer(server FinishedInterface serverInterface, uchar grid[IMHT][IMWD / 8]){
+void initServer(server FinishedInterface serverInterface[NUMCPUs], chanend workers[NUMCPUs], uchar grid[IMHT][IMWD / 8], int* linesReceived, int* lineToSend){
     uchar alteredGrid[IMHT][IMWD / 8];
-    int linesReceived = 0, lineToSend = 9;
     int started = 1;
     while(started){
         select {
-            case serverInterface.hasFinished(int id, uchar result[IMWD / 8]):
-                alteredGrid[id] = result;
-
-                // Check for finish
-                linesReceived++;
-                if(linesReceived == IMHT){
-                    // Finished this cycle
-                    printf("Finished Cycle");
-                    return (-1, null, null, null);
-
-                } else if(lineToSend == IMHT) {
-                    // Do nothing
-                    printf("All lines sent");
-                    return (-1, null, null, null);
-                } else {
-                    lineToSend++;
-                    printf("New Worker %d", lineToSend);
-                    return (lineToSend, grid[lineToSend - 1 % 16], grid[lineToSend % 16], grid[lineToSend % 16]);
-                }
-            break;
-
+            case serverInterface[int j].hasFinished():
+                dealWithIt(workers[j], alteredGrid, grid, linesReceived, lineToSend);
+                break;
         }
     }
 }
-void initWorker(int id, client FinishedInterface clientInterface, uchar startLine[IMWD / 8], uchar midLine[IMWD / 8], uchar endLine[IMWD / 8]){
-    uchar newLine[IMWD / 8];
-    for(int x = 0; x<IMWD/8; x++){
-        newLine[x] = 0;
+
+void dealWithIt(chanend c, uchar alteredGrid[IMHT][IMWD / 8], uchar grid[IMHT][IMWD / 8], int* linesReceived, int* lineToSend){
+    int id;
+    c :> id;
+    for(int x = 0; x < IMWD / 8; x++){
+        c :> alteredGrid[id][x];
     }
+    (*linesReceived)++;
+    // Check for finish
+
+    if((*linesReceived) == IMHT){
+        // Finished this cycle
+        printf("Finished Cycle");
+        c <: -1;
+    }else if((*lineToSend) == IMHT) {
+        // Do nothing
+        printf("All lines sent");
+        c <: -1;
+    }else{
+        (*lineToSend)++;
+        printf("New Task %d", (*lineToSend));
+        c <: (*lineToSend);
+        for(int x = 0; x < IMWD / 8; x++){
+            c <: grid[(*lineToSend - 1 ) % 16][x];
+        }
+        for(int x = 0; x < IMWD / 8; x++){
+            c <: grid[(*lineToSend) % 16][x];
+        }
+        for(int x = 0; x < IMWD / 8; x++){
+            c <: grid[(*lineToSend + 1 ) % 16][x];
+        }
+    }
+}
+
+void initWorker(int CPUId, int lineId, chanend c, client FinishedInterface clientInterface){
+    uchar startLine[IMWD / 8];
+    uchar midLine[IMWD / 8];
+    uchar endLine[IMWD / 8];
+    uchar newLine[IMWD / 8];
     int started = 1;
     while(started){
+        for(int x = 0; x<IMWD/8; x++){
+            newLine[x] = 0;
+        }
         // do calculationsss...
         for(int x = 0; x<IMWD; x++)
         {
             int l = (x-1) % IMWD;
             int r = (x+1) % IMWD;
             int neighbours =
-              ((midline[l/8] >> (7 - (l%8)) ) && 1)
-            + ((midline[r/8] >> (7 - (r%8)) ) && 1)
+              ((midLine[l/8] >> (7 - (l%8)) ) && 1)
+            + ((midLine[r/8] >> (7 - (r%8)) ) && 1)
             + ((startLine[l/8] >> (7 - (l%8)) ) && 1)
             + ((startLine[r/8] >> (7 - (r%8)) ) && 1)
             + ((startLine[x/8] >> (7 - (x%8)) ) && 1)
@@ -167,7 +204,7 @@ void initWorker(int id, client FinishedInterface clientInterface, uchar startLin
             + ((endLine[r/8] >> (7 - (r%8)) ) && 1)
             + ((endLine[x/8] >> (7 - (x%8)) ) && 1);
             //x living
-            int living = ((midline[x/8] >> (7 - (x)) ) && 1);
+            int living = ((midLine[x/8] >> (7 - (x)) ) && 1);
             if(living){
                 if(neighbours==2 || neighbours==3){
                    newLine[x/8] += (1 << (7-x));
@@ -179,9 +216,24 @@ void initWorker(int id, client FinishedInterface clientInterface, uchar startLin
             }
         }
 
-        {id, startLine, midLine, endLine} = clientInterface.hasFinished(id, newLine);
-        if (id == -1){
+        clientInterface.hasFinished();
+        c <: lineId;
+        for(int x = 0; x < IMWD / 8; x++){
+            c <: newLine[x];
+        }
+
+        c :> lineId;
+        if(lineId==-1){
             break;
+        }
+        for(int x = 0; x < IMWD / 8; x++){
+            c :> startLine[x];
+        }
+        for(int x = 0; x < IMWD / 8; x++){
+            c :> midLine[x];
+        }
+        for(int x = 0; x < IMWD / 8; x++){
+            c :> endLine[x];
         }
     }
 }
