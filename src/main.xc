@@ -32,7 +32,7 @@ typedef interface FinishedInterface {
 } FinishedInterface;
 
 void initServer(server FinishedInterface serverInterface[NUMCPUs], chanend workers[NUMCPUs], uchar grid[IMHT][IMWD / 8], int* linesReceived, int* lineToSend);
-void initWorker(int CPUId, int lineId, chanend c, client FinishedInterface clientInterface);
+void initWorker(int CPUId, chanend c, client FinishedInterface clientInterface);
 void dealWithIt(chanend c, uchar alteredGrid[IMHT][IMWD / 8], uchar grid[IMHT][IMWD / 8], int* linesReceived, int* lineToSend);
 
 
@@ -116,7 +116,7 @@ void distributor(chanend c_in, chanend c_out, chanend fromAcc)
       initServer(finishedInterfaces, workerChans, grid, &linesReceived, &lineToSend);
 
       par (int i = 0; i < NUMCPUs; i++){
-          initWorker(i,i, workerChans[i], finishedInterfaces[i]);
+          initWorker(i, workerChans[i], finishedInterfaces[i]);
       }
   }
 
@@ -182,11 +182,27 @@ void dealWithIt(chanend c, uchar alteredGrid[IMHT][IMWD / 8], uchar grid[IMHT][I
     }
 }
 
-void initWorker(int CPUId, int lineId, chanend c, client FinishedInterface clientInterface){
+void initWorker(int CPUId, chanend c, client FinishedInterface clientInterface){
+    int lineId;
     uchar startLine[IMWD / 8];
     uchar midLine[IMWD / 8];
     uchar endLine[IMWD / 8];
     uchar newLine[IMWD / 8];
+
+    c :> lineId;
+    if(lineId==-1){
+        break;
+    }
+    for(int x = 0; x < IMWD / 8; x++){
+        c :> startLine[x];
+    }
+    for(int x = 0; x < IMWD / 8; x++){
+        c :> midLine[x];
+    }
+    for(int x = 0; x < IMWD / 8; x++){
+        c :> endLine[x];
+    }
+
     int started = 1;
     while(started){
         for(int x = 0; x<IMWD/8; x++){
