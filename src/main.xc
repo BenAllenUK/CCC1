@@ -9,7 +9,7 @@
 
 #define  IMHT 16                  //image height
 #define  IMWD 16                  //image width
-#define  NUMCPUs 10
+#define  NUMCPUs 4
 
 typedef unsigned char uchar;      //using uchar as shorthand
 
@@ -61,12 +61,17 @@ void DataInStream(char infname[], chanend c_out)
     _readinline( line, IMWD );
     for( int x = 0; x < IMWD; x += 8 ) {
         uchar linePart = 0;
+        printf("%d\n", x);
         for( int z = 0; z < 8; z++){
+            printf("%d\n", z);
            if(line[x + z] == 255){
                linePart += 1 << (7 - z);
            }
+
         }
+        printf("Line part\n");
         c_out <: linePart;
+        printf("output\n");
 
     }
   }
@@ -87,7 +92,7 @@ void DataInStream(char infname[], chanend c_out)
 void distributor(chanend c_in, chanend c_out, chanend fromAcc)
 {
   uchar val;
-  uchar static grid[IMHT][IMWD / 8];
+  uchar grid[IMHT][IMWD / 8];
 
   //Starting up and wait for tilting of the xCore-200 Explorer
   printf( "ProcessImage:Start, size = %dx%d\n", IMHT, IMWD );
@@ -101,11 +106,12 @@ void distributor(chanend c_in, chanend c_out, chanend fromAcc)
   for( int y = 0; y < IMHT; y++ ) {   //go through all lines
     for( int x = 0; x < IMWD; x += 8 ) { //go through each pixel per line
       c_in :> val;                    //read the pixel value
-
+      printf("%d ", val);
       grid[y][x] = val;
 
-      //c_out <: (uchar)( val ^ 0xFF ); //send some modified pixel out
+      c_out <: val; //send some modified pixel out
     }
+    printf("\n");
   }
   printf( "\nOne processing round completed...\n" );
 
@@ -120,24 +126,27 @@ void distributor(chanend c_in, chanend c_out, chanend fromAcc)
       }
   }
 
-  for(int i = 0; i < NUMCPUs; i++){
-      lineToSend++;
-      printf("New Task %d", lineToSend);
-      workerChans[i] <: lineToSend;
-      for(int x = 0; x < IMWD / 8; x++){
-          workerChans[i] <: grid[(lineToSend - 1 ) % 16][x];
-      }
-      for(int x = 0; x < IMWD / 8; x++){
-          workerChans[i] <: grid[(lineToSend) % 16][x];
-      }
-      for(int x = 0; x < IMWD / 8; x++){
-          workerChans[i] <: grid[(lineToSend + 1 ) % 16][x];
-      }
-  }
+
 
 
 }
 void initServer(server FinishedInterface serverInterface[NUMCPUs], chanend workers[NUMCPUs], uchar grid[IMHT][IMWD / 8], int* linesReceived, int* lineToSend){
+
+    for(int i = 0; i < NUMCPUs; i++){
+        (*lineToSend)++;
+        printf("New Task %d", (*lineToSend));
+        workers[i] <: (*lineToSend);
+        for(int x = 0; x < IMWD / 8; x++){
+            workers[i] <: grid[((*lineToSend) - 1 ) % 16][x];
+        }
+        for(int x = 0; x < IMWD / 8; x++){
+            workers[i] <: grid[((*lineToSend)) % 16][x];
+        }
+        for(int x = 0; x < IMWD / 8; x++){
+            workers[i] <: grid[((*lineToSend) + 1 ) % 16][x];
+        }
+    }
+
     uchar alteredGrid[IMHT][IMWD / 8];
     int started = 1;
     while(started){
@@ -190,9 +199,9 @@ void initWorker(int CPUId, chanend c, client FinishedInterface clientInterface){
     uchar newLine[IMWD / 8];
 
     c :> lineId;
-    if(lineId==-1){
-        break;
-    }
+
+
+
     for(int x = 0; x < IMWD / 8; x++){
         c :> startLine[x];
     }
