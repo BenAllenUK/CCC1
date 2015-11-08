@@ -5,16 +5,19 @@
 #include <xs1.h>
 #include <stdio.h>
 #include "pgmIO.h"
-#include "i2c.h"
+//#include "i2c.h"
 
 #define  IMHT 16                  //image height
 #define  IMWD 16                  //image width
-#define  NUMCPUs 2
+#define  NUMCPUs 13
+
+#define infname "test.pgm"     //put your input image path here
+#define outfname "testout.pgm" //put your output image path here
 
 typedef unsigned char uchar;      //using uchar as shorthand
 
-port p_scl = XS1_PORT_1E;         //interface ports to accelerometer
-port p_sda = XS1_PORT_1F;
+//port p_scl = XS1_PORT_1E;         //interface ports to accelerometer
+//port p_sda = XS1_PORT_1F;
 
 #define FXOS8700EQ_I2C_ADDR 0x1E  //register addresses for accelerometer
 #define FXOS8700EQ_XYZ_DATA_CFG_REG 0x0E
@@ -31,8 +34,8 @@ typedef interface FinishedInterface {
     void hasFinished();
 } FinishedInterface;
 
-void initServer(server FinishedInterface serverInterface[NUMCPUs], chanend workers[NUMCPUs], uchar grid[IMHT][IMWD / 8], int* linesReceived, int* lineToSend, uchar alteredGrid[IMHT][IMWD / 8]);
-void initWorker(int CPUId, chanend c, client FinishedInterface clientInterface);
+void initServer( chanend workers[NUMCPUs], uchar grid[IMHT][IMWD / 8], int* linesReceived, int* lineToSend, uchar alteredGrid[IMHT][IMWD / 8]);
+void initWorker(int CPUId, chanend c);
 void dealWithIt(int j, chanend c, uchar alteredGrid[IMHT][IMWD / 8], uchar grid[IMHT][IMWD / 8], int* linesReceived, int* lineToSend);
 
 
@@ -43,7 +46,7 @@ void dealWithIt(int j, chanend c, uchar alteredGrid[IMHT][IMWD / 8], uchar grid[
 // Read Image from PGM file from path infname[] to channel c_out
 //
 /////////////////////////////////////////////////////////////////////////////////////////
-void DataInStream(char infname[], chanend c_out)
+void DataInStream(chanend c_out)
 {
   int res;
   uchar line[ IMWD ];
@@ -84,7 +87,7 @@ void DataInStream(char infname[], chanend c_out)
 // Currently the function just inverts the image
 //
 /////////////////////////////////////////////////////////////////////////////////////////
-void distributor(chanend c_in, chanend c_out, chanend fromAcc)
+void distributor(chanend c_in, chanend c_out, /*chanend fromAcc,*/ chanend workerChans[NUMCPUs])
 {
   uchar val;
   uchar grid[IMHT][IMWD / 8];
@@ -92,7 +95,7 @@ void distributor(chanend c_in, chanend c_out, chanend fromAcc)
   //Starting up and wait for tilting of the xCore-200 Explorer
   printf( "ProcessImage:Start, size = %dx%d\n", IMHT, IMWD );
   printf( "Waiting for Board Tilt...\n" );
-  fromAcc :> int value;
+  //fromAcc :> int value;
 
   //Read in and do something with your image values..
   //This just inverts every pixel, but you should
@@ -109,18 +112,13 @@ void distributor(chanend c_in, chanend c_out, chanend fromAcc)
   }
   printf( "One processing round completed...\n" );
   uchar alteredGrid[IMHT][IMWD / 8];
-  interface FinishedInterface finishedInterfaces[NUMCPUs];
-  chan workerChans[NUMCPUs];
+
   int linesReceived = 0;
   int lineToSend = -1;
   printf( "Before par\n" );
-  par{
-      initServer(finishedInterfaces, workerChans, grid, &linesReceived, &lineToSend, alteredGrid);
 
-      par (int i = 0; i < NUMCPUs; i++){
-          initWorker(i, workerChans[i], finishedInterfaces[i]);
-      }
-  }
+  initServer(workerChans, grid, &linesReceived, &lineToSend, alteredGrid);
+
   printf("Finished\n");
   //printing out
   printf("Original\n");
@@ -137,7 +135,7 @@ void distributor(chanend c_in, chanend c_out, chanend fromAcc)
       }
   }
 }
-void initServer(server FinishedInterface serverInterface[NUMCPUs], chanend workers[NUMCPUs], uchar grid[IMHT][IMWD / 8], int* linesReceived, int* lineToSend, uchar alteredGrid[IMHT][IMWD / 8]){
+void initServer( chanend workers[NUMCPUs], uchar grid[IMHT][IMWD / 8], int* linesReceived, int* lineToSend, uchar alteredGrid[IMHT][IMWD / 8]){
     printf("Start of Server\n");
     for(int i = 0; i < NUMCPUs; i++){
           (*lineToSend)++;
@@ -159,7 +157,6 @@ void initServer(server FinishedInterface serverInterface[NUMCPUs], chanend worke
     int running = 1;
     while(running){
         select {
-            //case serverInterface[int j].hasFinished():
             case workers[int j] :> int id:
                 if(id == -1){
                     running = 0;
@@ -207,7 +204,7 @@ void dealWithIt(int j, chanend c, uchar alteredGrid[IMHT][IMWD / 8], uchar grid[
     }
 }
 
-void initWorker(int CPUId, chanend c, client FinishedInterface clientInterface){
+void initWorker(int CPUId, chanend c){
     int lineId;
     uchar startLine[IMWD / 8];
     uchar midLine[IMWD / 8];
@@ -262,7 +259,6 @@ void initWorker(int CPUId, chanend c, client FinishedInterface clientInterface){
             }
         }
         printf("Worker %d: before interface called\n", CPUId);
-        //clientInterface.hasFinished();
         c <: 1;
         printf("Worker %d: after interface called\n", CPUId);
         printf("Worker %d: About to send LineID: \n", CPUId, lineId);
@@ -301,7 +297,7 @@ void initWorker(int CPUId, chanend c, client FinishedInterface clientInterface){
 // Write pixel stream from channel c_in to PGM image file
 //
 /////////////////////////////////////////////////////////////////////////////////////////
-void DataOutStream(char outfname[], chanend c_in)
+void DataOutStream(chanend c_in)
 {
   int res;
   uchar line[ IMWD ];
@@ -364,8 +360,8 @@ void DataOutStream(char outfname[], chanend c_in)
 // Initialise and  read accelerometer, send first tilt event to channel
 //
 /////////////////////////////////////////////////////////////////////////////////////////
-void accelerometer(client interface i2c_master_if i2c, chanend toDist) {
-  i2c_regop_res_t result;
+void accelerometer(/*client interface i2c_master_if i2c,*/ chanend toDist) {
+  /*i2c_regop_res_t result;
   char status_data = 0;
   int tilted = 0;
 
@@ -399,7 +395,8 @@ void accelerometer(client interface i2c_master_if i2c, chanend toDist) {
         toDist <: 1;
       }
     }
-  }
+  }*/
+    toDist <: 1;
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -409,18 +406,26 @@ void accelerometer(client interface i2c_master_if i2c, chanend toDist) {
 /////////////////////////////////////////////////////////////////////////////////////////
 int main(void) {
 
-  i2c_master_if i2c[1];               //interface to accelerometer
+  //i2c_master_if i2c[1];               //interface to accelerometer
 
-  char infname[] = "test.pgm";     //put your input image path here
-  char outfname[] = "testout.pgm"; //put your output image path here
-  chan c_inIO, c_outIO, c_control;    //extend your channel definitions here
-
+  chan c_inIO, c_outIO/*, c_control*/;    //extend your channel definitions here
+  chan workerChans[NUMCPUs];
   par {
-    i2c_master(i2c, 1, p_scl, p_sda, 10);   //server thread providing accelerometer data
-    accelerometer(i2c[0],c_control);        //client thread reading accelerometer data
-    DataInStream(infname, c_inIO);          //thread to read in a PGM image
-    DataOutStream(outfname, c_outIO);       //thread to write out a PGM image
-    distributor(c_inIO, c_outIO, c_control);//thread to coordinate work on image
+    //on tile[0]: i2c_master(i2c, 1, p_scl, p_sda, 10);   //server thread providing accelerometer data
+    //on tile[0]: accelerometer(/*i2c[0],*/c_control);        //client thread reading accelerometer data
+    on tile[0]: DataInStream(c_inIO);          //thread to read in a PGM image
+    on tile[0]: DataOutStream(c_outIO);       //thread to write out a PGM image
+    on tile[0]: distributor(c_inIO, c_outIO, /*c_control,*/ workerChans);//thread to coordinate work on image
+
+
+    par (int i = 0; i < 8; i++){
+      on tile[1]: initWorker(i, workerChans[i]);
+    }
+
+    par (int i = 8; i < 13; i++){
+          on tile[0]: initWorker(i, workerChans[i]);
+        }
+
   }
 
   return 0;
