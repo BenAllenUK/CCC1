@@ -121,13 +121,21 @@ void distributor(chanend c_in, chanend c_out, chanend fromAcc)
           initWorker(i, workerChans[i], finishedInterfaces[i]);
       }
   }
+  printf("Finished\n");
   //printing out
+  printf("Original\n");
+  for( int y = 0; y < IMHT; y++ ) {   //go through all lines
+        for( int x = 0; x < IMWD/8; x++ ) { //go through each pixel per line
+           c_out <: grid[y][x]; //send some modified pixel out
+        }
+  }
+  c_out <: 0;
+  printf("Updated\n");
   for( int y = 0; y < IMHT; y++ ) {   //go through all lines
       for( int x = 0; x < IMWD/8; x++ ) { //go through each pixel per line
          c_out <: alteredGrid[y][x]; //send some modified pixel out
       }
-    }
-  printf("Finished\n");
+  }
 }
 void initServer(server FinishedInterface serverInterface[NUMCPUs], chanend workers[NUMCPUs], uchar grid[IMHT][IMWD / 8], int* linesReceived, int* lineToSend, uchar alteredGrid[IMHT][IMWD / 8]){
     printf("Start of Server\n");
@@ -324,6 +332,26 @@ void DataOutStream(char outfname[], chanend c_in)
     printf( "\n" );
     _writeoutline( line, IMWD );
   }
+
+  c_in :> int y;
+
+  for( int y = 0; y < IMHT; y++ ) {
+      for( int x = 0; x < IMWD; x += 8 ) {
+          uchar linePart;
+          c_in :> linePart;
+          for( int z = 0; z < 8; z++){
+              uchar newChar = (uchar)0;
+              if(((linePart >> (7 - z)) & 1) == 1){
+                  newChar = (uchar)(255);
+              }
+              line[x + z] = newChar;
+              printf( "-%4.1d ", newChar );
+          }
+          printf( " " );
+      }
+      printf( "\n" );
+      _writeoutline( line, IMWD );
+    }
 
   //Close the PGM image
   _closeoutpgm();
