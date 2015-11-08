@@ -9,7 +9,7 @@
 
 #define  IMHT 16                  //image height
 #define  IMWD 16                  //image width
-#define  NUMCPUs 4
+#define  NUMCPUs 2
 
 typedef unsigned char uchar;      //using uchar as shorthand
 
@@ -31,9 +31,9 @@ typedef interface FinishedInterface {
     void hasFinished();
 } FinishedInterface;
 
-void initServer(server FinishedInterface serverInterface[NUMCPUs], chanend workers[NUMCPUs], uchar grid[IMHT][IMWD / 8], int* linesReceived, int* lineToSend);
+void initServer(server FinishedInterface serverInterface[NUMCPUs], chanend workers[NUMCPUs], uchar grid[IMHT][IMWD / 8], int* linesReceived, int* lineToSend, uchar alteredGrid[IMHT][IMWD / 8]);
 void initWorker(int CPUId, chanend c, client FinishedInterface clientInterface);
-void dealWithIt(chanend c, uchar alteredGrid[IMHT][IMWD / 8], uchar grid[IMHT][IMWD / 8], int* linesReceived, int* lineToSend);
+void dealWithIt(int j, chanend c, uchar alteredGrid[IMHT][IMWD / 8], uchar grid[IMHT][IMWD / 8], int* linesReceived, int* lineToSend);
 
 
 
@@ -61,17 +61,12 @@ void DataInStream(char infname[], chanend c_out)
     _readinline( line, IMWD );
     for( int x = 0; x < IMWD; x += 8 ) {
         uchar linePart = 0;
-        printf("%d\n", x);
         for( int z = 0; z < 8; z++){
-            printf("%d\n", z);
            if(line[x + z] == 255){
                linePart += 1 << (7 - z);
            }
-
         }
-        printf("Line part\n");
         c_out <: linePart;
-        printf("output\n");
 
     }
   }
@@ -104,89 +99,102 @@ void distributor(chanend c_in, chanend c_out, chanend fromAcc)
   //change the image according to the "Game of Life"
   printf( "Processing...\n" );
   for( int y = 0; y < IMHT; y++ ) {   //go through all lines
-    for( int x = 0; x < IMWD; x += 8 ) { //go through each pixel per line
+    for( int x = 0; x < IMWD/8; x++ ) { //go through each pixel per line
       c_in :> val;                    //read the pixel value
-      printf("%d ", val);
+
       grid[y][x] = val;
 
-      c_out <: val; //send some modified pixel out
+      //c_out <: (uchar)( val ^ 0xFF ); //send some modified pixel out
     }
-    printf("\n");
   }
-  printf( "\nOne processing round completed...\n" );
-
+  printf( "One processing round completed...\n" );
+  uchar alteredGrid[IMHT][IMWD / 8];
   interface FinishedInterface finishedInterfaces[NUMCPUs];
   chan workerChans[NUMCPUs];
-  int linesReceived = 0, lineToSend = 0;
+  int linesReceived = 0;
+  int lineToSend = -1;
+  printf( "Before par\n" );
   par{
-      initServer(finishedInterfaces, workerChans, grid, &linesReceived, &lineToSend);
+      initServer(finishedInterfaces, workerChans, grid, &linesReceived, &lineToSend, alteredGrid);
 
       par (int i = 0; i < NUMCPUs; i++){
           initWorker(i, workerChans[i], finishedInterfaces[i]);
       }
   }
-
-
-
-
-}
-void initServer(server FinishedInterface serverInterface[NUMCPUs], chanend workers[NUMCPUs], uchar grid[IMHT][IMWD / 8], int* linesReceived, int* lineToSend){
-
-    for(int i = 0; i < NUMCPUs; i++){
-        (*lineToSend)++;
-        printf("New Task %d", (*lineToSend));
-        workers[i] <: (*lineToSend);
-        for(int x = 0; x < IMWD / 8; x++){
-            workers[i] <: grid[((*lineToSend) - 1 ) % 16][x];
-        }
-        for(int x = 0; x < IMWD / 8; x++){
-            workers[i] <: grid[((*lineToSend)) % 16][x];
-        }
-        for(int x = 0; x < IMWD / 8; x++){
-            workers[i] <: grid[((*lineToSend) + 1 ) % 16][x];
-        }
+  //printing out
+  for( int y = 0; y < IMHT; y++ ) {   //go through all lines
+      for( int x = 0; x < IMWD/8; x++ ) { //go through each pixel per line
+         c_out <: alteredGrid[y][x]; //send some modified pixel out
+      }
     }
+  printf("Finished\n");
+}
+void initServer(server FinishedInterface serverInterface[NUMCPUs], chanend workers[NUMCPUs], uchar grid[IMHT][IMWD / 8], int* linesReceived, int* lineToSend, uchar alteredGrid[IMHT][IMWD / 8]){
+    printf("Start of Server\n");
+    for(int i = 0; i < NUMCPUs; i++){
+          (*lineToSend)++;
+          printf("Server: Beginning of %d loop\n", (*lineToSend));
+          workers[i] <: (*lineToSend);
+          for(int x = 0; x < IMWD / 8; x++){
+              workers[i] <: grid[((*lineToSend) - 1 ) & (16-1)][x];
+          }
+          for(int x = 0; x < IMWD / 8; x++){
+              workers[i] <: grid[((*lineToSend)) & (16-1)][x];
+          }
+          for(int x = 0; x < IMWD / 8; x++){
+              workers[i] <: grid[((*lineToSend) + 1 ) & (16-1)][x];
+          }
+          printf("Server: After sending Date\n");
+      }
 
-    uchar alteredGrid[IMHT][IMWD / 8];
-    int started = 1;
-    while(started){
+
+    int running = 1;
+    while(running){
         select {
-            case serverInterface[int j].hasFinished():
-                dealWithIt(workers[j], alteredGrid, grid, linesReceived, lineToSend);
+            //case serverInterface[int j].hasFinished():
+            case workers[int j] :> int id:
+                if(id == -1){
+                    running = 0;
+                }else{
+                    printf("Server: Interface Called by CPU:%d\n", j);
+                    dealWithIt(j, workers[j], alteredGrid, grid, linesReceived, lineToSend);
+                }
                 break;
         }
     }
 }
 
-void dealWithIt(chanend c, uchar alteredGrid[IMHT][IMWD / 8], uchar grid[IMHT][IMWD / 8], int* linesReceived, int* lineToSend){
+void dealWithIt(int j, chanend c, uchar alteredGrid[IMHT][IMWD / 8], uchar grid[IMHT][IMWD / 8], int* linesReceived, int* lineToSend){
+    printf("Start of dealWithIt for %d\n", j);
     int id;
     c :> id;
+    printf("Server: after ID recieved for %d\n", j);
     for(int x = 0; x < IMWD / 8; x++){
         c :> alteredGrid[id][x];
     }
     (*linesReceived)++;
     // Check for finish
-
+    printf("Server: after data recieved for %d\n", j);
     if((*linesReceived) == IMHT){
         // Finished this cycle
-        printf("Finished Cycle");
-        c <: -1;
-    }else if((*lineToSend) == IMHT) {
+        printf("All lines recieved - by %d\n", j);
+        c <: -2;
+    }else if((*lineToSend)+1 == IMHT) {
         // Do nothing
-        printf("All lines sent");
+        printf("All lines sent - by %d\n", j);
         c <: -1;
     }else{
         (*lineToSend)++;
-        printf("New Task %d", (*lineToSend));
+        printf("Server: Beginning of loops for %d\n", j);
         c <: (*lineToSend);
         for(int x = 0; x < IMWD / 8; x++){
-            c <: grid[(*lineToSend - 1 ) % 16][x];
+            c <: grid[(*lineToSend - 1 ) & (16-1)][x];
         }
         for(int x = 0; x < IMWD / 8; x++){
-            c <: grid[(*lineToSend) % 16][x];
+            c <: grid[(*lineToSend) & (16-1)][x];
         }
         for(int x = 0; x < IMWD / 8; x++){
-            c <: grid[(*lineToSend + 1 ) % 16][x];
+            c <: grid[(*lineToSend + 1 ) & (16-1)][x];
         }
     }
 }
@@ -198,10 +206,10 @@ void initWorker(int CPUId, chanend c, client FinishedInterface clientInterface){
     uchar endLine[IMWD / 8];
     uchar newLine[IMWD / 8];
 
+    printf("Worker %d: before recieving data\n", CPUId);
+
     c :> lineId;
-
-
-
+    printf("Worker %d: recieved lineId %d\n", CPUId, lineId);
     for(int x = 0; x < IMWD / 8; x++){
         c :> startLine[x];
     }
@@ -211,6 +219,8 @@ void initWorker(int CPUId, chanend c, client FinishedInterface clientInterface){
     for(int x = 0; x < IMWD / 8; x++){
         c :> endLine[x];
     }
+
+    printf("Worker %d: after recieving data\n", CPUId);
 
     int started = 1;
     while(started){
@@ -243,15 +253,26 @@ void initWorker(int CPUId, chanend c, client FinishedInterface clientInterface){
                 }
             }
         }
-
-        clientInterface.hasFinished();
+        printf("Worker %d: before interface called\n", CPUId);
+        //clientInterface.hasFinished();
+        c <: 1;
+        printf("Worker %d: after interface called\n", CPUId);
+        printf("Worker %d: About to send LineID: \n", CPUId, lineId);
         c <: lineId;
         for(int x = 0; x < IMWD / 8; x++){
             c <: newLine[x];
         }
 
         c :> lineId;
+        printf("Worker %d: after recieved Id/Code\n", CPUId);
+
         if(lineId==-1){
+            started = 0;
+            printf("Worker %d: Killed\n", CPUId);
+            break;
+        }else if(lineId==-2){
+            c <: -1;
+            printf("Worker %d: and Server Killed\n", CPUId);
             break;
         }
         for(int x = 0; x < IMWD / 8; x++){
@@ -263,6 +284,7 @@ void initWorker(int CPUId, chanend c, client FinishedInterface clientInterface){
         for(int x = 0; x < IMWD / 8; x++){
             c :> endLine[x];
         }
+        printf("Worker %d: after recieved Data\n", CPUId);
     }
 }
 
