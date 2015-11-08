@@ -9,7 +9,7 @@
 
 #define  IMHT 16                  //image height
 #define  IMWD 16                  //image width
-#define  NUMCPUs 2
+#define  NUMCPUs 4
 
 typedef unsigned char uchar;      //using uchar as shorthand
 
@@ -27,12 +27,10 @@ port p_sda = XS1_PORT_1F;
 #define FXOS8700EQ_OUT_Z_MSB 0x5
 #define FXOS8700EQ_OUT_Z_LSB 0x6
 
-typedef interface FinishedInterface {
-    void hasFinished();
-} FinishedInterface;
 
-void initServer(server FinishedInterface serverInterface[NUMCPUs], chanend workers[NUMCPUs], uchar grid[IMHT][IMWD / 8], int* linesReceived, int* lineToSend, uchar alteredGrid[IMHT][IMWD / 8]);
-void initWorker(int CPUId, chanend c, client FinishedInterface clientInterface);
+
+void initServer( chanend workers[NUMCPUs], uchar grid[IMHT][IMWD / 8], int* linesReceived, int* lineToSend, uchar alteredGrid[IMHT][IMWD / 8]);
+void initWorker(int CPUId, chanend c);
 void dealWithIt(int j, chanend c, uchar alteredGrid[IMHT][IMWD / 8], uchar grid[IMHT][IMWD / 8], int* linesReceived, int* lineToSend);
 
 
@@ -109,16 +107,16 @@ void distributor(chanend c_in, chanend c_out, chanend fromAcc)
   }
   printf( "One processing round completed...\n" );
   uchar alteredGrid[IMHT][IMWD / 8];
-  interface FinishedInterface finishedInterfaces[NUMCPUs];
+
   chan workerChans[NUMCPUs];
   int linesReceived = 0;
   int lineToSend = -1;
   printf( "Before par\n" );
   par{
-      initServer(finishedInterfaces, workerChans, grid, &linesReceived, &lineToSend, alteredGrid);
+      initServer( workerChans, grid, &linesReceived, &lineToSend, alteredGrid);
 
       par (int i = 0; i < NUMCPUs; i++){
-          initWorker(i, workerChans[i], finishedInterfaces[i]);
+          initWorker(i, workerChans[i]);
       }
   }
   printf("Finished\n");
@@ -137,7 +135,7 @@ void distributor(chanend c_in, chanend c_out, chanend fromAcc)
       }
   }
 }
-void initServer(server FinishedInterface serverInterface[NUMCPUs], chanend workers[NUMCPUs], uchar grid[IMHT][IMWD / 8], int* linesReceived, int* lineToSend, uchar alteredGrid[IMHT][IMWD / 8]){
+void initServer(chanend workers[NUMCPUs], uchar grid[IMHT][IMWD / 8], int* linesReceived, int* lineToSend, uchar alteredGrid[IMHT][IMWD / 8]){
     printf("Start of Server\n");
     for(int i = 0; i < NUMCPUs; i++){
           (*lineToSend)++;
@@ -159,7 +157,6 @@ void initServer(server FinishedInterface serverInterface[NUMCPUs], chanend worke
     int running = 1;
     while(running){
         select {
-            //case serverInterface[int j].hasFinished():
             case workers[int j] :> int id:
                 if(id == -1){
                     running = 0;
@@ -207,7 +204,7 @@ void dealWithIt(int j, chanend c, uchar alteredGrid[IMHT][IMWD / 8], uchar grid[
     }
 }
 
-void initWorker(int CPUId, chanend c, client FinishedInterface clientInterface){
+void initWorker(int CPUId, chanend c){
     int lineId;
     uchar startLine[IMWD / 8];
     uchar midLine[IMWD / 8];
@@ -262,7 +259,7 @@ void initWorker(int CPUId, chanend c, client FinishedInterface clientInterface){
             }
         }
         printf("Worker %d: before interface called\n", CPUId);
-        //clientInterface.hasFinished();
+
         c <: 1;
         printf("Worker %d: after interface called\n", CPUId);
         printf("Worker %d: About to send LineID: \n", CPUId, lineId);
