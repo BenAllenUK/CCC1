@@ -142,7 +142,7 @@ void distributor(chanend c_in, chanend c_out, chanend fromAcc, chanend workerCha
   printf( "One processing round completed...\n" );
   //printGrid(grids[0]);
   int k;
-  for(k = 0; k<120; k++){
+  for(k = 0; k<1000000; k++){
       int linesReceived = 0;
       int lineToSend = -1;
       #ifdef DEBUG
