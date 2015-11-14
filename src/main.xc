@@ -11,7 +11,7 @@
 #define  IMWD 16                  //image width
 #define  NUMCPUs 4
 
-
+//#define DEBUG
 
 typedef unsigned char uchar;      //using uchar as shorthand
 
@@ -31,12 +31,14 @@ port p_sda = XS1_PORT_1F;
 
 
 
-void initServer( chanend workers[NUMCPUs], uchar grid[IMHT][IMWD / 8], int* linesReceived, int* lineToSend, uchar alteredGrid[IMHT][IMWD / 8]);
+void initServer( chanend workers[NUMCPUs], uchar grid[IMHT][IMWD/8], int* linesReceived, int* lineToSend, uchar alteredGrid[IMHT][IMWD/8]);
 void initWorker(int CPUId, chanend c);
-void dealWithIt(int j, chanend c, uchar alteredGrid[IMHT][IMWD / 8], uchar grid[IMHT][IMWD / 8], int* linesReceived, int* lineToSend);
+void dealWithIt(int j, chanend c, uchar alteredGrid[IMHT][IMWD/8], uchar grid[IMHT][IMWD/8], int* linesReceived, int* lineToSend);
 
 
-
+int indexer(int y, int x){
+    return y*IMWD + x;
+}
 
 /////////////////////////////////////////////////////////////////////////////////////////
 //
@@ -84,10 +86,30 @@ void DataInStream(char infname[], chanend c_out)
 // Currently the function just inverts the image
 //
 /////////////////////////////////////////////////////////////////////////////////////////
-void distributor(chanend c_in, chanend c_out, chanend fromAcc)
+
+void printBin(uchar num){
+    for(int y = 0; y<8; y++){
+        printf("%d", ((num >> (7 - y)) & 1));
+    }
+
+}
+
+void printGrid(uchar grid[IMHT][IMWD / 8]){
+    for(int x = 0; x<IMHT; x++){
+        for(int y = 0; y<IMWD / 8; y++){
+            printBin(grid[x][y]);
+        }
+        printf("\n");
+    }
+    printf("\n");
+}
+
+
+void distributor(chanend c_in, chanend c_out, chanend fromAcc, chanend workerChans[NUMCPUs])
 {
   uchar val;
-  uchar grid[IMHT][IMWD / 8];
+  uchar grids[2][IMHT][IMWD / 8];
+
 
   //Starting up and wait for tilting of the xCore-200 Explorer
   printf( "ProcessImage:Start, size = %dx%d\n", IMHT, IMWD );
@@ -102,49 +124,62 @@ void distributor(chanend c_in, chanend c_out, chanend fromAcc)
     for( int x = 0; x < IMWD/8; x++ ) { //go through each pixel per line
       c_in :> val;                    //read the pixel value
 
-      grid[y][x] = val;
+      grids[0][y][ x] = val;
 
       //c_out <: (uchar)( val ^ 0xFF ); //send some modified pixel out
     }
   }
-  printf( "One processing round completed...\n" );
-  uchar alteredGrid[IMHT][IMWD / 8];
 
-  chan workerChans[NUMCPUs];
-  int linesReceived = 0;
-  int lineToSend = -1;
-#ifdef DEBUG
-  printf( "Before par\n" );
-#endif
-  par{
-      initServer( workerChans, grid, &linesReceived, &lineToSend, alteredGrid);
-
-      par (int i = 0; i < NUMCPUs; i++){
-          initWorker(i, workerChans[i]);
-      }
-  }
-#ifdef DEBUG
-  printf("Finished\n");
-#endif
-  //printing out
   printf("Original\n");
 
-  for( int y = 0; y < IMHT; y++ ) {   //go through all lines
-        for( int x = 0; x < IMWD/8; x++ ) { //go through each pixel per line
-           c_out <: grid[y][x]; //send some modified pixel out
-        }
+    for( int y = 0; y < IMHT; y++ ) {   //go through all lines
+          for( int x = 0; x < IMWD/8; x++ ) { //go through each pixel per line
+             c_out <: grids[0][y][x]; //send some modified pixel out
+          }
+    }
+    //sychronise
+      c_out <: 0;
+  printf( "One processing round completed...\n" );
+  //printGrid(grids[0]);
+  int k;
+  for(k = 0; k<120; k++){
+      int linesReceived = 0;
+      int lineToSend = -1;
+      #ifdef DEBUG
+          printf( "Before par\n" );
+      #endif
+      if(k%2==0){
+          initServer(workerChans, grids[0] , &linesReceived, &lineToSend, grids[1]);
+      }else{
+          initServer(workerChans, grids[1] , &linesReceived, &lineToSend, grids[0]);
+      }
+
   }
-  c_out <: 0;
+    #ifdef DEBUG
+      printf("Finished\n");
+    #endif
+  //printing out
+
+  int new = 0;
+  if(k%2==0){
+      new = 0;
+  }else{
+      new = 1;
+  }
+
+
+
 
   printf("Updated\n");
 
   for( int y = 0; y < IMHT; y++ ) {   //go through all lines
       for( int x = 0; x < IMWD/8; x++ ) { //go through each pixel per line
-         c_out <: alteredGrid[y][x]; //send some modified pixel out
+         c_out <: grids[new][y][x]; //send some modified pixel out
       }
   }
+
 }
-void initServer(chanend workers[NUMCPUs], uchar grid[IMHT][IMWD / 8], int* linesReceived, int* lineToSend, uchar alteredGrid[IMHT][IMWD / 8]){
+void initServer(chanend workers[NUMCPUs], uchar  grid[IMHT][IMWD/8], int* linesReceived, int* lineToSend, uchar alteredGrid[IMHT][IMWD/8]){
     #ifdef DEBUG
     printf("Start of Server\n");
     #endif
@@ -155,7 +190,7 @@ void initServer(chanend workers[NUMCPUs], uchar grid[IMHT][IMWD / 8], int* lines
           #endif
           workers[i] <: (*lineToSend);
           for(int x = 0; x < IMWD / 8; x++){
-              workers[i] <: grid[((*lineToSend) - 1 ) & (16-1)][x];
+              workers[i] <: grid[((*lineToSend) - 1 ) & (16-1)][ x];
           }
           for(int x = 0; x < IMWD / 8; x++){
               workers[i] <: grid[((*lineToSend)) & (16-1)][x];
@@ -186,7 +221,7 @@ void initServer(chanend workers[NUMCPUs], uchar grid[IMHT][IMWD / 8], int* lines
     }
 }
 
-void dealWithIt(int j, chanend c, uchar alteredGrid[IMHT][IMWD / 8], uchar grid[IMHT][IMWD / 8], int* linesReceived, int* lineToSend){
+void dealWithIt(int j, chanend c, uchar alteredGrid[IMHT][IMWD/8], uchar grid[IMHT][IMWD/8], int* linesReceived, int* lineToSend){
     #ifdef DEBUG
     printf("Start of dealWithIt for %d\n", j);
     #endif
@@ -222,109 +257,32 @@ void dealWithIt(int j, chanend c, uchar alteredGrid[IMHT][IMWD / 8], uchar grid[
         #endif
         c <: (*lineToSend);
         for(int x = 0; x < IMWD / 8; x++){
-            c <: grid[(*lineToSend - 1 ) & (16-1)][x];
+            c <: grid[(*lineToSend - 1 ) & (16-1)][ x];
         }
         for(int x = 0; x < IMWD / 8; x++){
-            c <: grid[(*lineToSend) & (16-1)][x];
+            c <: grid[(*lineToSend) & (16-1)][ x];
         }
         for(int x = 0; x < IMWD / 8; x++){
-            c <: grid[(*lineToSend + 1 ) & (16-1)][x];
+            c <: grid[(*lineToSend + 1 ) & (16-1)][ x];
         }
     }
 }
 
 void initWorker(int CPUId, chanend c){
-    int lineId;
-    uchar startLine[IMWD / 8];
-    uchar midLine[IMWD / 8];
-    uchar endLine[IMWD / 8];
-    uchar newLine[IMWD / 8];
-    #ifdef DEBUG
-    printf("Worker %d: before recieving data\n", CPUId);
-    #endif
-
-    c :> lineId;
-    #ifdef DEBUG
-    printf("Worker %d: recieved lineId %d\n", CPUId, lineId);
-    #endif
-    for(int x = 0; x < IMWD / 8; x++){
-        c :> startLine[x];
-    }
-    for(int x = 0; x < IMWD / 8; x++){
-        c :> midLine[x];
-    }
-    for(int x = 0; x < IMWD / 8; x++){
-        c :> endLine[x];
-    }
-    #ifdef DEBUG
-    printf("Worker %d: after recieving data\n", CPUId);
-    #endif
-
-    int started = 1;
-    while(started){
-        for(int x = 0; x<IMWD/8; x++){
-            newLine[x] = 0;
-        }
-        // do calculationsss...
-        for(int x = 0; x<IMWD; x++)
-        {
-            int l = (x-1) % IMWD;
-            int r = (x+1) % IMWD;
-            int neighbours =
-              ((midLine[l/8] >> (7 - (l%8)) ) && 1)
-            + ((midLine[r/8] >> (7 - (r%8)) ) && 1)
-            + ((startLine[l/8] >> (7 - (l%8)) ) && 1)
-            + ((startLine[r/8] >> (7 - (r%8)) ) && 1)
-            + ((startLine[x/8] >> (7 - (x%8)) ) && 1)
-            + ((endLine[l/8] >> (7 - (l%8)) ) && 1)
-            + ((endLine[r/8] >> (7 - (r%8)) ) && 1)
-            + ((endLine[x/8] >> (7 - (x%8)) ) && 1);
-            //x living
-            int living = ((midLine[x/8] >> (7 - (x)) ) && 1);
-            if(living){
-                if(neighbours==2 || neighbours==3){
-                   newLine[x/8] += (1 << (7-x));
-                }
-            }else if(!(living)){
-                if(neighbours == 3){
-                    newLine[x/8] += (1 << (7-x));
-                }
-            }
-        }
+    while(1){
+        int lineId;
+        uchar startLine[IMWD / 8];
+        uchar midLine[IMWD / 8];
+        uchar endLine[IMWD / 8];
+        uchar newLine[IMWD / 8];
         #ifdef DEBUG
-        printf("Worker %d: before interface called\n", CPUId);
+        printf("Worker %d: before recieving data\n", CPUId);
         #endif
-
-        c <: 1;
-        #ifdef DEBUG
-        printf("Worker %d: after interface called\n", CPUId);
-        #endif
-        #ifdef DEBUG
-        printf("Worker %d: About to send LineID: \n", CPUId, lineId);
-        #endif
-        c <: lineId;
-        for(int x = 0; x < IMWD / 8; x++){
-            c <: newLine[x];
-        }
 
         c :> lineId;
         #ifdef DEBUG
-        printf("Worker %d: after recieved Id/Code\n", CPUId);
+        printf("Worker %d: recieved lineId %d\n", CPUId, lineId);
         #endif
-
-        if(lineId==-1){
-            started = 0;
-            #ifdef DEBUG
-            printf("Worker %d: Killed\n", CPUId);
-            #endif
-            break;
-        }else if(lineId==-2){
-            c <: -1;
-            #ifdef DEBUG
-            printf("Worker %d: and Server Killed\n", CPUId);
-            #endif
-            break;
-        }
         for(int x = 0; x < IMWD / 8; x++){
             c :> startLine[x];
         }
@@ -335,8 +293,89 @@ void initWorker(int CPUId, chanend c){
             c :> endLine[x];
         }
         #ifdef DEBUG
-        printf("Worker %d: after recieved Data\n", CPUId);
+        printf("Worker %d: after recieving data\n", CPUId);
         #endif
+
+        int started = 1;
+        while(started){
+            for(int x = 0; x<IMWD/8; x++){
+                newLine[x] = 0;
+            }
+            // do calculationsss...
+            for(int x = 0; x<IMWD; x++)
+            {
+                int l = (x-1+IMWD) % IMWD;
+                int r = (x+1) % IMWD;
+                int neighbours =
+                  ((midLine[l/8] >> (7 - (l%8)) ) & 1)
+                + ((midLine[r/8] >> (7 - (r%8)) ) & 1)
+                + ((startLine[l/8] >> (7 - (l%8)) ) & 1)
+                + ((startLine[r/8] >> (7 - (r%8)) ) & 1)
+                + ((startLine[x/8] >> (7 - (x%8)) ) & 1)
+                + ((endLine[l/8] >> (7 - (l%8)) ) & 1)
+                + ((endLine[r/8] >> (7 - (r%8)) ) & 1)
+                + ((endLine[x/8] >> (7 - (x%8)) ) & 1);
+                //x living
+                int living = ((midLine[x/8] >> (7 - (x%8)) ) & 1);
+
+                if(living==1){
+                    if(neighbours==2 || neighbours==3){
+                       newLine[x/8] += (1 << (7-(x%8)));
+                    }
+                }else if((living!=1)){
+                    if(neighbours == 3){
+                        newLine[x/8] += (1 << (7-(x%8)));
+                    }
+                }
+            }
+            #ifdef DEBUG
+            printf("Worker %d: before interface called\n", CPUId);
+            #endif
+
+            c <: 1;
+            #ifdef DEBUG
+            printf("Worker %d: after interface called\n", CPUId);
+            #endif
+            #ifdef DEBUG
+            printf("Worker %d: About to send LineID: \n", CPUId, lineId);
+            #endif
+            c <: lineId;
+            for(int x = 0; x < IMWD / 8; x++){
+                c <: newLine[x];
+            }
+
+            c :> lineId;
+            #ifdef DEBUG
+            printf("Worker %d: after recieved Id/Code\n", CPUId);
+            #endif
+
+            if(lineId==-1){
+                started = 0;
+                #ifdef DEBUG
+                printf("Worker %d: Killed\n", CPUId);
+                #endif
+                break;
+            }else if(lineId==-2){
+                c <: -1;
+                #ifdef DEBUG
+                printf("Worker %d: and Server Killed\n", CPUId);
+                #endif
+                break;
+            }
+            for(int x = 0; x < IMWD / 8; x++){
+                c :> startLine[x];
+            }
+            for(int x = 0; x < IMWD / 8; x++){
+                c :> midLine[x];
+            }
+            for(int x = 0; x < IMWD / 8; x++){
+                c :> endLine[x];
+            }
+            #ifdef DEBUG
+            printf("Worker %d: after recieved Data\n", CPUId);
+            #endif
+        }
+
     }
 }
 
@@ -458,13 +497,17 @@ int main(void) {
   char infname[] = "test.pgm";     //put your input image path here
   char outfname[] = "testout.pgm"; //put your output image path here
   chan c_inIO, c_outIO, c_control;    //extend your channel definitions here
+  chan workerChans[NUMCPUs];
 
   par {
     i2c_master(i2c, 1, p_scl, p_sda, 10);   //server thread providing accelerometer data
     accelerometer(i2c[0],c_control);        //client thread reading accelerometer data
     DataInStream(infname, c_inIO);          //thread to read in a PGM image
     DataOutStream(outfname, c_outIO);       //thread to write out a PGM image
-    distributor(c_inIO, c_outIO, c_control);//thread to coordinate work on image
+    distributor(c_inIO, c_outIO, c_control, workerChans);//thread to coordinate work on image
+    par (int i = 0; i < NUMCPUs; i++){
+        initWorker(i, workerChans[i]);
+    }
   }
 
   return 0;
