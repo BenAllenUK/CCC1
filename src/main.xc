@@ -149,9 +149,7 @@ void distributor(chanend c_in, chanend c_out, chanend fromAcc, chanend workerCha
              c_out <: grids[0][y][x]; //send some modified pixel out
       }
     }
-    //sychronise
-      c_out <: 0;
-  printf( "One processing round completed...\n" );
+
   int k = 0;
   while(1){
       int linesReceived = 0;
@@ -170,30 +168,26 @@ void distributor(chanend c_in, chanend c_out, chanend fromAcc, chanend workerCha
 
 
 
-      // Button break
+      // Button read
       btnPress :> btnVal;
       if(btnVal == 14){
-          break;
+        //print out and then carry on.
+        ledDisplay <: 2;
+
+        printf("Updated\n");
+        //sychronise
+        c_out <: 0;
+        for( int y = 0; y < IMHT; y++ ) {   //go through all lines
+            for( int x = 0; x < IMWD/8; x++ ) { //go through each pixel per line
+               c_out <: grids[1 - k%2][y][x]; //send some modified pixel out
+            }
+        }
       }
+
       k++;
   }
 
-  ledDisplay <: 2;
-
-  int new;
-  if(k%2==0){
-      new = 0;
-  }else{
-      new = 1;
-  }
-
-  printf("Updated\n");
-
-  for( int y = 0; y < IMHT; y++ ) {   //go through all lines
-      for( int x = 0; x < IMWD/8; x++ ) { //go through each pixel per line
-         c_out <: grids[new][y][x]; //send some modified pixel out
-      }
-  }
+  c_out <: -1;
 
 }
 void initServer(chanend workers[NUMCPUs], uchar  grid[IMHT][IMWD/8], int* linesReceived, int* lineToSend, uchar alteredGrid[IMHT][IMWD/8]){
@@ -360,43 +354,32 @@ void DataOutStream(char outfname[], chanend c_in)
   }
 
   //Compile each line of the image and write the image line-by-line
-  for( int y = 0; y < IMHT; y++ ) {
-    for( int x = 0; x < IMWD; x += 8 ) {
-        uchar linePart;
-        c_in :> linePart;
-        for( int z = 0; z < 8; z++){
-            uchar newChar = (uchar)0;
-            if(((linePart >> (7 - z)) & 1) == 1){
-                newChar = (uchar)(255);
+  while(1){
+      for( int y = 0; y < IMHT; y++ ) {
+        for( int x = 0; x < IMWD; x += 8 ) {
+            uchar linePart;
+            c_in :> linePart;
+            for( int z = 0; z < 8; z++){
+                uchar newChar = (uchar)0;
+                if(((linePart >> (7 - z)) & 1) == 1){
+                    newChar = (uchar)(255);
+                }
+                line[x + z] = newChar;
+                printf( "-%4.1d ", newChar );
             }
-            line[x + z] = newChar;
-            printf( "-%4.1d ", newChar );
+            printf( " " );
         }
-        printf( " " );
-    }
-    printf( "\n" );
-    _writeoutline( line, IMWD );
+        printf( "\n" );
+        _writeoutline( line, IMWD );
+      }
+      int y;
+      c_in :> y;
+      if(y == -1){
+          break;
+      }
   }
 
-  c_in :> int y;
 
-  for( int y = 0; y < IMHT; y++ ) {
-      for( int x = 0; x < IMWD; x += 8 ) {
-          uchar linePart;
-          c_in :> linePart;
-          for( int z = 0; z < 8; z++){
-              uchar newChar = (uchar)0;
-              if(((linePart >> (7 - z)) & 1) == 1){
-                  newChar = (uchar)(255);
-              }
-              line[x + z] = newChar;
-              printf( "-%4.1d ", newChar );
-          }
-          printf( " " );
-      }
-      printf( "\n" );
-      _writeoutline( line, IMWD );
-    }
 
   //Close the PGM image
   _closeoutpgm();
