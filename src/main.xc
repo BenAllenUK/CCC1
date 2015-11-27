@@ -38,10 +38,14 @@ on tile[0] : out port leds = XS1_PORT_4F;   //port to access xCore-200 LEDs
 #define FINISH_SERVER -2
 #define CONTINUE_SERVER 1
 
+#define EMPTY -1
+#define NOT_EMPTY 0
+
 void initServer( chanend workers[NUMCPUs], uchar grid[IMHT][IMWD/8], int* linesReceived, int* lineToSend, uchar alteredGrid[IMHT][IMWD/8]);
 void initWorker(int CPUId, chanend c);
 void dealWithIt(int j, chanend c, uchar alteredGrid[IMHT][IMWD/8], uchar grid[IMHT][IMWD/8], int* linesReceived, int* lineToSend);
 void sendData(chanend c, uchar grid[IMHT][IMWD/8], int* lineToSend);
+int gridDoesNotNeedProccessingAsItAndItsNeighboursAreEmpty(uchar grid[IMHT][IMWD/8], int* lineToSend);
 
 int indexer(int y, int x){
     return y*IMWD + x;
@@ -105,8 +109,10 @@ void printGrid(uchar grid[IMHT][IMWD / 8]){
 
 void distributor(chanend c_in, chanend c_out, chanend fromAcc, chanend workerChans[NUMCPUs], chanend ledDisplay, chanend btnPress)
 {
+  printf("Distributor: Start...\nDistributor: Waiting for button press\n");
   uchar val;
   uchar grids[2][IMHT][IMWD / 8];
+
 
   int btnResponse;
   btnPress :> btnResponse;
@@ -116,14 +122,10 @@ void distributor(chanend c_in, chanend c_out, chanend fromAcc, chanend workerCha
       btnPress :> btnResponse;
   }
 
+
   //Starting up and wait for tilting of the xCore-200 Explorer
   printf( "ProcessImage:Start, size = %dx%d\n", IMHT, IMWD );
-  printf( "Waiting for Board Tilt...\n" );
 
-  //Read in and do something with your image values..
-  //This just inverts every pixel, but you should
-  //change the image according to the "Game of Life"
-  printf( "Processing...\n" );
   ledDisplay <: 4;
   for( int y = 0; y < IMHT; y++) {
     for( int x = 0; x < IMWD/8; x++) {
@@ -155,8 +157,6 @@ void distributor(chanend c_in, chanend c_out, chanend fromAcc, chanend workerCha
           fromAcc :> accResponse;
           ledDisplay <: 8;
       }
-
-
 
       // Button read
       btnPress :> btnVal;
@@ -227,11 +227,33 @@ void dealWithIt(int j, chanend c, uchar alteredGrid[IMHT][IMWD/8], uchar grid[IM
         c <: STOP_WORKER;
     }else{
         (*lineToSend)++;
+        while(gridDoesNotNeedProccessingAsItAndItsNeighboursAreEmpty(grid, lineToSend)==EMPTY){
+            for(int x = 0; x < IMWD / 8; x++){
+                alteredGrid[(*lineToSend)][x];
+            }
+            (*linesReceived)++;
+            (*lineToSend)++;
+        }
         c <: (*lineToSend);
         sendData(c, grid, lineToSend);
 
     }
 }
+
+ int gridDoesNotNeedProccessingAsItAndItsNeighboursAreEmpty(uchar grid[IMHT][IMWD/8], int* lineToSend){
+     for(int x = 0; x < IMWD / 8; x++){
+         if(grid[(*lineToSend - 1 ) & (16-1)][x] != 0){
+             return NOT_EMPTY;
+         }
+         if((grid[(*lineToSend) & (16-1)])[x] != 0){
+             return NOT_EMPTY;
+         }
+         if((grid[(*lineToSend + 1 ) & (16-1)])[x] != 0){
+             return NOT_EMPTY;
+         }
+     }
+     return EMPTY;
+ }
 
 void sendData(chanend c, uchar grid[IMHT][IMWD/8], int* lineToSend){
     for(int x = 0; x < IMWD / 8; x++){
@@ -246,6 +268,7 @@ void sendData(chanend c, uchar grid[IMHT][IMWD/8], int* lineToSend){
 }
 
 void initWorker(int CPUId, chanend c){
+    printf("Worker (%d): Start...\n", CPUId);
     while(1){
         int lineId;
         uchar startLine[IMWD / 8], midLine[IMWD / 8], endLine[IMWD / 8], newLine[IMWD / 8];
@@ -270,6 +293,7 @@ void initWorker(int CPUId, chanend c){
 
             for(int x = 0; x<IMWD; x++)
             {
+
                 int l = (x-1+IMWD) % IMWD;
                 int r = (x+1) % IMWD;
                 int neighbours =
@@ -334,7 +358,7 @@ void DataOutStream(char outfname[], chanend c_in)
   uchar line[ IMWD ];
 
   //Open PGM file
-  printf( "DataOutStream:Start...\n" );
+  printf( "DataOutStream: Start...\n" );
   res = _openoutpgm( outfname, IMWD, IMHT );
   if( res ) {
     printf( "DataOutStream:Error opening %s\n.", outfname );
@@ -376,7 +400,8 @@ void DataOutStream(char outfname[], chanend c_in)
 }
 
 void accelerometer(client interface i2c_master_if i2c, chanend toDist) {
-    toDist <: 1;
+  printf("Accelerometer: Start...\n");
+  toDist <: 1;
   i2c_regop_res_t result;
   char status_data = 0;
 

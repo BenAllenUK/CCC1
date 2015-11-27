@@ -15,6 +15,7 @@
 <fDef name="distributor" global="true" noreturn="false" doNotSpecialize="false" numParams="6"/>
 <fDef name="get_read_data" global="true" interface="i2c_master_async_if" noreturn="false" doNotSpecialize="false" numParams="2"/>
 <fDef name="get_write_result" global="true" interface="i2c_master_async_if" noreturn="false" doNotSpecialize="false" numParams="1"/>
+<fDef name="gridDoesNotNeedProccessingAsItAndItsNeighboursAreEmpty" global="true" noreturn="false" doNotSpecialize="false" numParams="2"/>
 <fDef name="indexer" global="true" noreturn="false" doNotSpecialize="false" numParams="2"/>
 <fDef name="initServer" global="true" noreturn="false" doNotSpecialize="false" numParams="5"/>
 <fDef name="initWorker" global="true" noreturn="true" doNotSpecialize="false" numParams="2"/>
@@ -540,6 +541,13 @@
     </values>
   </arg>
 </fCall>
+<fCall name="printf" global="true" numArgs="1">
+  <arg num="0">
+    <values>
+      <value type="unknown"/>
+    </values>
+  </arg>
+</fCall>
 <fCall name="printf" global="true" numArgs="3">
   <arg num="0">
     <values>
@@ -554,20 +562,6 @@
   <arg num="2">
     <values>
       <value type="intval"><intval isSigned="true" val="16"/></value>
-    </values>
-  </arg>
-</fCall>
-<fCall name="printf" global="true" numArgs="1">
-  <arg num="0">
-    <values>
-      <value type="unknown"/>
-    </values>
-  </arg>
-</fCall>
-<fCall name="printf" global="true" numArgs="1">
-  <arg num="0">
-    <values>
-      <value type="unknown"/>
     </values>
   </arg>
 </fCall>
@@ -644,6 +638,18 @@
     </values>
   </arg>
 </fCall>
+<fCall name="gridDoesNotNeedProccessingAsItAndItsNeighboursAreEmpty" global="true" numArgs="2">
+  <arg num="0">
+    <values>
+      <value type="unknown"/>
+    </values>
+  </arg>
+  <arg num="1">
+    <values>
+      <value type="unknown"/>
+    </values>
+  </arg>
+</fCall>
 <fCall name="sendData" global="true" numArgs="3">
   <arg num="0">
     <passThroughArg param="1" caller="dealWithIt" global="true"/>
@@ -656,6 +662,18 @@
     </values>
   </arg>
   <arg num="2">
+    <values>
+      <value type="unknown"/>
+    </values>
+  </arg>
+</fCall>
+<fCall name="printf" global="true" numArgs="2">
+  <arg num="0">
+    <values>
+      <value type="unknown"/>
+    </values>
+  </arg>
+  <arg num="1">
     <values>
       <value type="unknown"/>
     </values>
@@ -736,6 +754,13 @@
   </arg>
 </fCall>
 <fCall name="_closeoutpgm" global="true" numArgs="0">
+</fCall>
+<fCall name="printf" global="true" numArgs="1">
+  <arg num="0">
+    <values>
+      <value type="unknown"/>
+    </values>
+  </arg>
 </fCall>
 <fCall name="printf" global="true" numArgs="1">
   <arg num="0">
