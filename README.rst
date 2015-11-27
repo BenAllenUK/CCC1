@@ -1,3 +1,5 @@
+https://docs.google.com/document/d/10m6SoRMrJJNdffCjCC02k68kQRldarXQ5kQl4ey2waU/edit?usp=sharing
+
 xCORE-200 explorer - Accelerometer
 ==================================
 
