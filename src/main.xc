@@ -38,7 +38,6 @@ on tile[0] : out port leds = XS1_PORT_4F;   //port to access xCore-200 LEDs
 #define FINISH_SERVER -2
 #define CONTINUE_SERVER 1
 
-
 void initServer( chanend workers[NUMCPUs], uchar grid[IMHT][IMWD/8], int* linesReceived, int* lineToSend, uchar alteredGrid[IMHT][IMWD/8]);
 void initWorker(int CPUId, chanend c);
 void dealWithIt(int j, chanend c, uchar alteredGrid[IMHT][IMWD/8], uchar grid[IMHT][IMWD/8], int* linesReceived, int* lineToSend);
@@ -87,14 +86,6 @@ void DataInStream(char infname[], chanend c_out)
   return;
 }
 
-/////////////////////////////////////////////////////////////////////////////////////////
-//
-// Start your implementation by changing this function to implement the game of life
-// by farming out parts of the image to worker threads who implement it...
-// Currently the function just inverts the image
-//
-/////////////////////////////////////////////////////////////////////////////////////////
-
 void printBin(uchar num){
     for(int y = 0; y<8; y++){
         printf("%d", ((num >> (7 - y)) & 1));
@@ -111,7 +102,6 @@ void printGrid(uchar grid[IMHT][IMWD / 8]){
     }
     printf("\n");
 }
-
 
 void distributor(chanend c_in, chanend c_out, chanend fromAcc, chanend workerChans[NUMCPUs], chanend ledDisplay, chanend btnPress)
 {
@@ -190,6 +180,7 @@ void distributor(chanend c_in, chanend c_out, chanend fromAcc, chanend workerCha
   c_out <: -1;
 
 }
+
 void initServer(chanend workers[NUMCPUs], uchar  grid[IMHT][IMWD/8], int* linesReceived, int* lineToSend, uchar alteredGrid[IMHT][IMWD/8]){
     for(int i = 0; i < NUMCPUs; i++){
           (*lineToSend)++;
@@ -241,6 +232,7 @@ void dealWithIt(int j, chanend c, uchar alteredGrid[IMHT][IMWD/8], uchar grid[IM
 
     }
 }
+
 void sendData(chanend c, uchar grid[IMHT][IMWD/8], int* lineToSend){
     for(int x = 0; x < IMWD / 8; x++){
         c <: grid[(*lineToSend - 1 ) & (16-1)][ x];
@@ -252,6 +244,7 @@ void sendData(chanend c, uchar grid[IMHT][IMWD/8], int* lineToSend){
         c <: grid[(*lineToSend + 1 ) & (16-1)][ x];
     }
 }
+
 void initWorker(int CPUId, chanend c){
     while(1){
         int lineId;
@@ -335,11 +328,6 @@ void initWorker(int CPUId, chanend c){
     }
 }
 
-/////////////////////////////////////////////////////////////////////////////////////////
-//
-// Write pixel stream from channel c_in to PGM image file
-//
-/////////////////////////////////////////////////////////////////////////////////////////
 void DataOutStream(char outfname[], chanend c_in)
 {
   int res;
@@ -387,11 +375,6 @@ void DataOutStream(char outfname[], chanend c_in)
   return;
 }
 
-/////////////////////////////////////////////////////////////////////////////////////////
-//
-// Initialise and  read accelerometer, send first tilt event to channel
-//
-/////////////////////////////////////////////////////////////////////////////////////////
 void accelerometer(client interface i2c_master_if i2c, chanend toDist) {
     toDist <: 1;
   i2c_regop_res_t result;
@@ -437,6 +420,7 @@ int showLEDs(out port p, chanend fromVisualiser) {
   }
   return 0;
 }
+
 void buttonListener(in port b, chanend responseChan) {
   int r;
   while (1) {
@@ -445,11 +429,7 @@ void buttonListener(in port b, chanend responseChan) {
     responseChan <: r;             // send button pattern to userAnt
   }
 }
-/////////////////////////////////////////////////////////////////////////////////////////
-//
-// Orchestrate concurrent system and start up all threads
-//
-/////////////////////////////////////////////////////////////////////////////////////////
+
 int main(void) {
 
   i2c_master_if i2c[1];               //interface to accelerometer
