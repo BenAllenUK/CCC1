@@ -10,7 +10,7 @@
 
 #define  IMHT 16                  //image height
 #define  IMWD 16                  //image width
-#define  NUMCPUs 10
+#define  NUMCPUs 12
 
 //#define DEBUG
 
@@ -34,24 +34,23 @@ on tile[0] : out port leds = XS1_PORT_4F;   //port to access xCore-200 LEDs
 #define FXOS8700EQ_OUT_Z_MSB 0x5
 #define FXOS8700EQ_OUT_Z_LSB 0x6
 
-#define STOP_WORKER -1
-#define FINISH_SERVER -2
-#define CONTINUE_SERVER 1
+#define WORKER_WAIT_FOR_NEXT_ROUND -1
+#define SERVER_CONTINUE 1
+#define SERVER_FINISH_ROUND 0
+
+#define EMPTY -1
+#define NOT_EMPTY 0
 
 void initServer( chanend workers[NUMCPUs], uchar grid[IMHT][IMWD/8], int* linesReceived, int* lineToSend, uchar alteredGrid[IMHT][IMWD/8]);
 void initWorker(int CPUId, chanend c);
-void dealWithIt(int j, chanend c, uchar alteredGrid[IMHT][IMWD/8], uchar grid[IMHT][IMWD/8], int* linesReceived, int* lineToSend);
+int dealWithIt(int j, chanend c, uchar alteredGrid[IMHT][IMWD/8], uchar grid[IMHT][IMWD/8], int* linesReceived, int* lineToSend, int id);
 void sendData(chanend c, uchar grid[IMHT][IMWD/8], int* lineToSend);
+int gridDoesNotNeedProccessingAsItAndItsNeighboursAreEmpty(uchar grid[IMHT][IMWD/8], int* lineToSend);
 
 int indexer(int y, int x){
     return y*IMWD + x;
 }
 
-/////////////////////////////////////////////////////////////////////////////////////////
-//
-// Read Image from PGM file from path infname[] to channel c_out
-//
-/////////////////////////////////////////////////////////////////////////////////////////
 void DataInStream(char infname[], chanend c_out)
 {
   int res;
@@ -103,66 +102,72 @@ void printGrid(uchar grid[IMHT][IMWD / 8]){
     printf("\n");
 }
 
-void distributor(chanend c_in, chanend c_out, chanend fromAcc, chanend workerChans[NUMCPUs], chanend ledDisplay, chanend btnPress)
+void distributor(chanend c_in, chanend c_out, chanend fromAcc, chanend workerChans[NUMCPUs], out port leds, in port buttons)
 {
+  printf("Distributor: Start...\nDistributor: Waiting for button press\n");
   uchar val;
   uchar grids[2][IMHT][IMWD / 8];
 
+
   int btnResponse;
-  btnPress :> btnResponse;
+  buttons when pinseq(15)  :> btnResponse;
+  buttons when pinsneq(15) :> btnResponse;
 
   // Halt processing till button press
   while(btnResponse != 13){
-      btnPress :> btnResponse;
+      buttons when pinseq(15)  :> btnResponse;
+      buttons when pinsneq(15) :> btnResponse;
   }
 
-  //Starting up and wait for tilting of the xCore-200 Explorer
-  printf( "ProcessImage:Start, size = %dx%d\n", IMHT, IMWD );
-  printf( "Waiting for Board Tilt...\n" );
+  printf("Button Pressed\n");
 
-  //Read in and do something with your image values..
-  //This just inverts every pixel, but you should
-  //change the image according to the "Game of Life"
-  printf( "Processing...\n" );
-  ledDisplay <: 4;
+  printf("Started reading image (Green light)\n");
+
+  leds <: 4;
+
   for( int y = 0; y < IMHT; y++) {
     for( int x = 0; x < IMWD/8; x++) {
       c_in :> val;
       grids[0][y][ x] = val;
     }
   }
+  printf("Finished reading image\n");
 
-  printf("Original\n");
-
+  printf("Printout of Original\n");
   for( int y = 0; y < IMHT; y++) {   //go through all lines
       for( int x = 0; x < IMWD/8; x++) { //go through each pixel per line
              c_out <: grids[0][y][x]; //send some modified pixel out
       }
     }
+  //syncronise printouts
+  c_out <: 0;
 
+  printf( "Processing image:, size = %dx%d\n", IMHT, IMWD );
   int k = 0;
   while(1){
       int linesReceived = 0;
       int lineToSend = -1;
-      ledDisplay <: (k%2) << 3;
+      printf("New round started\n");
+      leds <: (k%2) << 3;
       initServer(workerChans, grids[k%2] , &linesReceived, &lineToSend, grids[1 - k%2]);
-      int btnVal;
+      printf("New round Finished\n");
+
 
       // Accelermeter Pause
       int accResponse;
       fromAcc :> accResponse;
       while(accResponse > 10){
           fromAcc :> accResponse;
-          ledDisplay <: 8;
+          leds <: 8;
       }
 
-
-
+      int btnVal;
       // Button read
-      btnPress :> btnVal;
+      buttons when pinseq(15)  :> btnVal;
+      buttons when pinsneq(15) :> btnVal;
       if(btnVal == 14){
         //print out and then carry on.
-        ledDisplay <: 2;
+        leds <: 2;
 
         printf("Updated\n");
         //sychronise
@@ -174,6 +179,7 @@ void distributor(chanend c_in, chanend c_out, chanend fromAcc, chanend workerCha
         }
       }
 
+
       k++;
   }
 
@@ -183,6 +189,7 @@ void distributor(chanend c_in, chanend c_out, chanend fromAcc, chanend workerCha
 
 void initServer(chanend workers[NUMCPUs], uchar  grid[IMHT][IMWD/8], int* linesReceived, int* lineToSend, uchar alteredGrid[IMHT][IMWD/8]){
     for(int i = 0; i < NUMCPUs; i++){
+        printf("Sending initial data to core: %d\n", i);
           (*lineToSend)++;
           workers[i] <: (*lineToSend);
           for(int x = 0; x < IMWD / 8; x++){
@@ -196,24 +203,18 @@ void initServer(chanend workers[NUMCPUs], uchar  grid[IMHT][IMWD/8], int* linesR
           }
       }
 
-
     int running = 1;
     while(running){
         select {
-            case workers[int j] :> int stopFlag:
-                if(stopFlag == STOP_WORKER){
-                    running = 0;
-                } else {
-                    dealWithIt(j, workers[j], alteredGrid, grid, linesReceived, lineToSend);
-                }
+            case workers[int j] :> int lineID:
+                running = dealWithIt(j, workers[j], alteredGrid, grid, linesReceived, lineToSend, lineID);
                 break;
         }
     }
 }
 
-void dealWithIt(int j, chanend c, uchar alteredGrid[IMHT][IMWD/8], uchar grid[IMHT][IMWD/8], int* linesReceived, int* lineToSend){
-    int id;
-    c :> id;
+int dealWithIt(int j, chanend c, uchar alteredGrid[IMHT][IMWD/8], uchar grid[IMHT][IMWD/8], int* linesReceived, int* lineToSend, int id){
+
     for(int x = 0; x < IMWD / 8; x++){
         c :> alteredGrid[id][x];
     }
@@ -221,17 +222,50 @@ void dealWithIt(int j, chanend c, uchar alteredGrid[IMHT][IMWD/8], uchar grid[IM
 
     if((*linesReceived) == IMHT){
         // Finished this cycle
-        c <: FINISH_SERVER;
-    }else if((*lineToSend)+1 == IMHT) {
+        c <: WORKER_WAIT_FOR_NEXT_ROUND;
+        return SERVER_FINISH_ROUND;
+    }
+
+    if((*lineToSend)+1 >= IMHT) {
         // Do nothing
-        c <: STOP_WORKER;
+        c <: WORKER_WAIT_FOR_NEXT_ROUND;
+        return SERVER_CONTINUE;
     }else{
         (*lineToSend)++;
+        while(gridDoesNotNeedProccessingAsItAndItsNeighboursAreEmpty(grid, lineToSend)==EMPTY && (*lineToSend) < IMHT){
+            for(int x = 0; x < IMWD / 8; x++){
+                alteredGrid[(*lineToSend)][x] = 0;
+            }
+            (*linesReceived)++;
+            (*lineToSend)++;
+        }
+
+        if((*lineToSend) == IMHT) {
+            // Do nothing
+            c <: WORKER_WAIT_FOR_NEXT_ROUND;
+            return SERVER_CONTINUE;
+        }
+
         c <: (*lineToSend);
         sendData(c, grid, lineToSend);
-
+        return SERVER_CONTINUE;
     }
 }
+
+ int gridDoesNotNeedProccessingAsItAndItsNeighboursAreEmpty(uchar grid[IMHT][IMWD/8], int* lineToSend){
+     for(int x = 0; x < IMWD / 8; x++){
+         if(grid[(*lineToSend - 1 ) & (16-1)][x] != 0){
+             return NOT_EMPTY;
+         }
+         if((grid[(*lineToSend) & (16-1)])[x] != 0){
+             return NOT_EMPTY;
+         }
+         if((grid[(*lineToSend + 1 ) & (16-1)])[x] != 0){
+             return NOT_EMPTY;
+         }
+     }
+     return EMPTY;
+ }
 
 void sendData(chanend c, uchar grid[IMHT][IMWD/8], int* lineToSend){
     for(int x = 0; x < IMWD / 8; x++){
@@ -246,11 +280,13 @@ void sendData(chanend c, uchar grid[IMHT][IMWD/8], int* lineToSend){
 }
 
 void initWorker(int CPUId, chanend c){
+    printf("Worker (%d): Start...\n", CPUId);
     while(1){
         int lineId;
         uchar startLine[IMWD / 8], midLine[IMWD / 8], endLine[IMWD / 8], newLine[IMWD / 8];
 
         c :> lineId;
+        printf("Worker started proccessing line %d\n", lineId);
 
         for(int x = 0; x < IMWD / 8; x++){
             c :> startLine[x];
@@ -270,6 +306,7 @@ void initWorker(int CPUId, chanend c){
 
             for(int x = 0; x<IMWD; x++)
             {
+
                 int l = (x-1+IMWD) % IMWD;
                 int r = (x+1) % IMWD;
                 int neighbours =
@@ -294,8 +331,6 @@ void initWorker(int CPUId, chanend c){
                 }
             }
 
-            c <: CONTINUE_SERVER;
-
             c <: lineId;
             for(int x = 0; x < IMWD / 8; x++){
                 c <: newLine[x];
@@ -304,13 +339,8 @@ void initWorker(int CPUId, chanend c){
             c :> lineId;
 
 
-            if(lineId==-1){
+            if(lineId==WORKER_WAIT_FOR_NEXT_ROUND){
                 started = 0;
-
-                break;
-            }else if(lineId==FINISH_SERVER){
-                c <: -1;
-
                 break;
             }
             for(int x = 0; x < IMWD / 8; x++){
@@ -334,7 +364,7 @@ void DataOutStream(char outfname[], chanend c_in)
   uchar line[ IMWD ];
 
   //Open PGM file
-  printf( "DataOutStream:Start...\n" );
+  printf( "DataOutStream: Start...\n" );
   res = _openoutpgm( outfname, IMWD, IMHT );
   if( res ) {
     printf( "DataOutStream:Error opening %s\n.", outfname );
@@ -376,7 +406,8 @@ void DataOutStream(char outfname[], chanend c_in)
 }
 
 void accelerometer(client interface i2c_master_if i2c, chanend toDist) {
-    toDist <: 1;
+  printf("Accelerometer: Start...\n");
+  toDist <: 1;
   i2c_regop_res_t result;
   char status_data = 0;
 
@@ -409,51 +440,25 @@ void accelerometer(client interface i2c_master_if i2c, chanend toDist) {
   }
 }
 
-int showLEDs(out port p, chanend fromVisualiser) {
-  int pattern; //1st bit...separate green LED
-               //2nd bit...blue LED
-               //3rd bit...green LED
-               //4th bit...red LED
-  while (1) {
-    fromVisualiser :> pattern;   //receive new pattern from visualiser
-    p <: pattern;                //send pattern to LED port
-  }
-  return 0;
-}
-
-void buttonListener(in port b, chanend responseChan) {
-  int r;
-  while (1) {
-    b when pinseq(15)  :> r;    // check that no button is pressed
-    b when pinsneq(15) :> r;    // check if some buttons are pressed// if either button is pressed
-    responseChan <: r;             // send button pattern to userAnt
-  }
-}
 
 int main(void) {
 
   i2c_master_if i2c[1];               //interface to accelerometer
 
-//  char infname[] = "test.pgm";     //put your input image path here
-//  char outfname[] = "testout.pgm"; //put your output image path here
-
   chan c_inIO, c_outIO, c_control;    //extend your channel definitions here
   chan workerChans[NUMCPUs];
-  chan buttonPress, ledDisplay;
 
   par {
     on tile[0]: i2c_master(i2c, 1, p_scl, p_sda, 10);   //server thread providing accelerometer data
     on tile[0]: accelerometer(i2c[0],c_control);        //client thread reading accelerometer data
     on tile[0]: DataInStream("test.pgm", c_inIO);          //thread to read in a PGM image
     on tile[0]: DataOutStream("testout.pgm", c_outIO);       //thread to write out a PGM image
-    on tile[0]: distributor(c_inIO, c_outIO, c_control, workerChans, ledDisplay, buttonPress);//thread to coordinate work on image
-    on tile[0]: buttonListener(buttons, buttonPress);
-    on tile[0]: showLEDs(leds, ledDisplay);
-    par (int i = 0; i < 2; i++){
+    on tile[0]: distributor(c_inIO, c_outIO, c_control, workerChans, leds, buttons);//thread to coordinate work on image
+    par (int i = 0; i < 4; i++){
         on tile[0]: initWorker(i, workerChans[i]);
     }
-    par (int i = 0; i < 8; i++){
-        on tile[1]: initWorker(i+2, workerChans[i+2]);
+    par (int i = 4; i < NUMCPUs; i++){
+        on tile[1]: initWorker(i, workerChans[i]);
     }
   }
 
