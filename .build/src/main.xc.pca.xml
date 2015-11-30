@@ -7,8 +7,7 @@
 <fDef name="accelerometer" global="true" noreturn="true" doNotSpecialize="false" numParams="2"/>
 <fDef name="ack_read_request" global="true" interface="i2c_slave_callback_if" noreturn="false" doNotSpecialize="false" numParams="0"/>
 <fDef name="ack_write_request" global="true" interface="i2c_slave_callback_if" noreturn="false" doNotSpecialize="false" numParams="0"/>
-<fDef name="buttonListener" global="true" noreturn="true" doNotSpecialize="false" numParams="2"/>
-<fDef name="dealWithIt" global="true" noreturn="false" doNotSpecialize="false" numParams="6"/>
+<fDef name="dealWithIt" global="true" noreturn="false" doNotSpecialize="false" numParams="7"/>
 <fDef name="delay_microseconds" global="true" noreturn="false" doNotSpecialize="true" numParams="1"/>
 <fDef name="delay_milliseconds" global="true" noreturn="false" doNotSpecialize="true" numParams="1"/>
 <fDef name="delay_seconds" global="true" noreturn="false" doNotSpecialize="true" numParams="1"/>
@@ -34,7 +33,6 @@
 <fDef name="sendData" global="true" noreturn="false" doNotSpecialize="false" numParams="3"/>
 <fDef name="send_stop_bit" global="true" interface="i2c_master_async_if" noreturn="false" doNotSpecialize="false" numParams="0"/>
 <fDef name="send_stop_bit" global="true" interface="i2c_master_if" noreturn="false" doNotSpecialize="false" numParams="0"/>
-<fDef name="showLEDs" global="true" noreturn="false" doNotSpecialize="false" numParams="2"/>
 <fDef name="shutdown" global="true" interface="i2c_master_async_if" noreturn="false" doNotSpecialize="false" numParams="0"/>
 <fDef name="shutdown" global="true" interface="i2c_master_if" noreturn="false" doNotSpecialize="false" numParams="0"/>
 <fDef name="shutdown" global="true" interface="i2c_slave_callback_if" noreturn="false" doNotSpecialize="false" numParams="0"/>
@@ -548,6 +546,82 @@
     </values>
   </arg>
 </fCall>
+<fCall name="__builtin_pins_eq" global="true" numArgs="2">
+  <arg num="0">
+    <values>
+      <value type="unknown"/>
+    </values>
+  </arg>
+  <arg num="1">
+    <values>
+      <value type="intval"><intval isSigned="true" val="15"/></value>
+    </values>
+  </arg>
+</fCall>
+<fCall name="__builtin_pins_ne" global="true" numArgs="2">
+  <arg num="0">
+    <values>
+      <value type="unknown"/>
+    </values>
+  </arg>
+  <arg num="1">
+    <values>
+      <value type="intval"><intval isSigned="true" val="15"/></value>
+    </values>
+  </arg>
+</fCall>
+<fCall name="__builtin_pins_eq" global="true" numArgs="2">
+  <arg num="0">
+    <values>
+      <value type="unknown"/>
+    </values>
+  </arg>
+  <arg num="1">
+    <values>
+      <value type="intval"><intval isSigned="true" val="15"/></value>
+    </values>
+  </arg>
+</fCall>
+<fCall name="__builtin_pins_ne" global="true" numArgs="2">
+  <arg num="0">
+    <values>
+      <value type="unknown"/>
+    </values>
+  </arg>
+  <arg num="1">
+    <values>
+      <value type="intval"><intval isSigned="true" val="15"/></value>
+    </values>
+  </arg>
+</fCall>
+<fCall name="printf" global="true" numArgs="1">
+  <arg num="0">
+    <values>
+      <value type="unknown"/>
+    </values>
+  </arg>
+</fCall>
+<fCall name="printf" global="true" numArgs="1">
+  <arg num="0">
+    <values>
+      <value type="unknown"/>
+    </values>
+  </arg>
+</fCall>
+<fCall name="printf" global="true" numArgs="1">
+  <arg num="0">
+    <values>
+      <value type="unknown"/>
+    </values>
+  </arg>
+</fCall>
+<fCall name="printf" global="true" numArgs="1">
+  <arg num="0">
+    <values>
+      <value type="unknown"/>
+    </values>
+  </arg>
+</fCall>
 <fCall name="printf" global="true" numArgs="3">
   <arg num="0">
     <values>
@@ -606,7 +680,50 @@
     </values>
   </arg>
 </fCall>
-<fCall name="dealWithIt" global="true" numArgs="6">
+<fCall name="__builtin_pins_eq" global="true" numArgs="2">
+  <arg num="0">
+    <values>
+      <value type="unknown"/>
+    </values>
+  </arg>
+  <arg num="1">
+    <values>
+      <value type="intval"><intval isSigned="true" val="15"/></value>
+    </values>
+  </arg>
+</fCall>
+<fCall name="__builtin_pins_ne" global="true" numArgs="2">
+  <arg num="0">
+    <values>
+      <value type="unknown"/>
+    </values>
+  </arg>
+  <arg num="1">
+    <values>
+      <value type="intval"><intval isSigned="true" val="15"/></value>
+    </values>
+  </arg>
+</fCall>
+<fCall name="printf" global="true" numArgs="1">
+  <arg num="0">
+    <values>
+      <value type="unknown"/>
+    </values>
+  </arg>
+</fCall>
+<fCall name="printf" global="true" numArgs="2">
+  <arg num="0">
+    <values>
+      <value type="unknown"/>
+    </values>
+  </arg>
+  <arg num="1">
+    <values>
+      <value type="unknown"/>
+    </values>
+  </arg>
+</fCall>
+<fCall name="dealWithIt" global="true" numArgs="7">
   <arg num="0">
     <values>
       <value type="unknown"/>
@@ -628,11 +745,16 @@
     </values>
   </arg>
   <arg num="4">
+    <passThroughArg param="2" caller="initServer" global="true"/>
+    <values>
+    </values>
+  </arg>
+  <arg num="5">
     <values>
       <value type="unknown"/>
     </values>
   </arg>
-  <arg num="5">
+  <arg num="6">
     <values>
       <value type="unknown"/>
     </values>
@@ -662,6 +784,18 @@
     </values>
   </arg>
   <arg num="2">
+    <values>
+      <value type="unknown"/>
+    </values>
+  </arg>
+</fCall>
+<fCall name="printf" global="true" numArgs="2">
+  <arg num="0">
+    <values>
+      <value type="unknown"/>
+    </values>
+  </arg>
+  <arg num="1">
     <values>
       <value type="unknown"/>
     </values>
@@ -861,30 +995,6 @@
     </values>
   </arg>
 </fCall>
-<fCall name="__builtin_pins_eq" global="true" numArgs="2">
-  <arg num="0">
-    <values>
-      <value type="unknown"/>
-    </values>
-  </arg>
-  <arg num="1">
-    <values>
-      <value type="intval"><intval isSigned="true" val="15"/></value>
-    </values>
-  </arg>
-</fCall>
-<fCall name="__builtin_pins_ne" global="true" numArgs="2">
-  <arg num="0">
-    <values>
-      <value type="unknown"/>
-    </values>
-  </arg>
-  <arg num="1">
-    <values>
-      <value type="intval"><intval isSigned="true" val="15"/></value>
-    </values>
-  </arg>
-</fCall>
 <fCall name="i2c_master" global="true" numArgs="5" impId="2">
   <arg num="0">
     <values>
@@ -980,30 +1090,6 @@
     </values>
   </arg>
 </fCall>
-<fCall name="buttonListener" global="true" numArgs="2" impId="7">
-  <arg num="0">
-    <values>
-      <value type="unknown"/>
-    </values>
-  </arg>
-  <arg num="1">
-    <values>
-      <value type="unknown"/>
-    </values>
-  </arg>
-</fCall>
-<fCall name="showLEDs" global="true" numArgs="2" impId="8">
-  <arg num="0">
-    <values>
-      <value type="unknown"/>
-    </values>
-  </arg>
-  <arg num="1">
-    <values>
-      <value type="unknown"/>
-    </values>
-  </arg>
-</fCall>
 <fCall name="initWorker" global="true" numArgs="2" impId="0">
   <arg num="0">
     <values>
@@ -1028,7 +1114,7 @@
     </values>
   </arg>
 </fCall>
-<fCall name="initWorker" global="true" numArgs="2" impId="1">
+<fCall name="initWorker" global="true" numArgs="2" impId="0">
   <arg num="0">
     <values>
       <value type="intval"><intval isSigned="true" val="2"/></value>
@@ -1040,7 +1126,7 @@
     </values>
   </arg>
 </fCall>
-<fCall name="initWorker" global="true" numArgs="2" impId="1">
+<fCall name="initWorker" global="true" numArgs="2" impId="0">
   <arg num="0">
     <values>
       <value type="intval"><intval isSigned="true" val="3"/></value>
@@ -1116,6 +1202,30 @@
   <arg num="0">
     <values>
       <value type="intval"><intval isSigned="true" val="9"/></value>
+    </values>
+  </arg>
+  <arg num="1">
+    <values>
+      <value type="unknown"/>
+    </values>
+  </arg>
+</fCall>
+<fCall name="initWorker" global="true" numArgs="2" impId="1">
+  <arg num="0">
+    <values>
+      <value type="intval"><intval isSigned="true" val="10"/></value>
+    </values>
+  </arg>
+  <arg num="1">
+    <values>
+      <value type="unknown"/>
+    </values>
+  </arg>
+</fCall>
+<fCall name="initWorker" global="true" numArgs="2" impId="1">
+  <arg num="0">
+    <values>
+      <value type="intval"><intval isSigned="true" val="11"/></value>
     </values>
   </arg>
   <arg num="1">
