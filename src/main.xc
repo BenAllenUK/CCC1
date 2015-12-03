@@ -115,6 +115,19 @@ void sendCurrentGameToOutStream(chanend c_out, uchar  grid[IMHT][IMWD/8]){
             c_out <: 0;
 }
 
+void sendData(chanend c, uchar grid[IMHT][IMWD/8], int* lineToSend){
+    printf("sending data from line %d\n", *lineToSend);
+    for(int x = 0; x < IMWD / 8; x++){
+        c <: grid[(((*lineToSend) - 1 ) + IMHT)%IMHT][ x];
+    }
+    for(int x = 0; x < IMWD / 8; x++){
+        c <: grid[(((*lineToSend)) + IMHT)%IMHT][ x];
+    }
+    for(int x = 0; x < IMWD / 8; x++){
+        c <: grid[(((*lineToSend) + 1 ) + IMHT)%IMHT][ x];
+    }
+}
+
 void distributor(chanend c_in, chanend c_out, chanend fromAcc, chanend workerChans[NUMCPUs], out port leds, chanend buttonsChan)
 {
   printf("Distributor: Start...\nDistributor: Waiting for button press\n");
@@ -162,19 +175,11 @@ void distributor(chanend c_in, chanend c_out, chanend fromAcc, chanend workerCha
 
   leds <: ((k)%2);
 
-    for(int i = 0; i < NUMCPUs; i++){
+    for(int i = 0; i < 1; i++){
         printf("Sending initial data to core: %d\n", i);
           lineToSend++;
           workerChans[i] <: lineToSend;
-          for(int x = 0; x < IMWD / 8; x++){
-              workerChans[i] <: grids[k%2][((lineToSend) - 1 ) & (16-1)][ x];
-          }
-          for(int x = 0; x < IMWD / 8; x++){
-              workerChans[i] <: grids[k%2][((lineToSend)) & (16-1)][x];
-          }
-          for(int x = 0; x < IMWD / 8; x++){
-              workerChans[i] <: grids[k%2][((lineToSend) + 1 ) & (16-1)][x];
-          }
+          sendData(workerChans[i], grids[k%2], &lineToSend);
     }
 
   while(1){
@@ -189,19 +194,11 @@ void distributor(chanend c_in, chanend c_out, chanend fromAcc, chanend workerCha
                   k++;
                   leds <: ((k)%2);
 
-                  for(int i = 0; i < NUMCPUs; i++){
+                  for(int i = 0; i < 1; i++){
                       printf("Sending initial data to core: %d\n", i);
                         lineToSend++;
                         workerChans[i] <: lineToSend;
-                        for(int x = 0; x < IMWD / 8; x++){
-                            workerChans[i] <: grids[k%2][((lineToSend) - 1 ) & (16-1)][ x];
-                        }
-                        for(int x = 0; x < IMWD / 8; x++){
-                            workerChans[i] <: grids[k%2][((lineToSend)) & (16-1)][x];
-                        }
-                        for(int x = 0; x < IMWD / 8; x++){
-                            workerChans[i] <: grids[k%2][((lineToSend) + 1 ) & (16-1)][x];
-                        }
+                        sendData(workerChans[i], grids[k%2], &lineToSend);
                   }
                   printf("end sending out new\n");
               }else{
@@ -223,6 +220,7 @@ void distributor(chanend c_in, chanend c_out, chanend fromAcc, chanend workerCha
               printf("Board level\n");
               break;
       }
+      printf("End of select\n");
    }
 }
 
@@ -252,7 +250,7 @@ void initServer(chanend workers[NUMCPUs], uchar  grid[IMHT][IMWD/8], int* linesR
 }
 */
 int dealWithIt(int j, chanend c, uchar alteredGrid[IMHT][IMWD/8], uchar grid[IMHT][IMWD/8], int* linesReceived, int* lineToSend, int id){
-
+    printf("deal with it %d\n", id);
     for(int x = 0; x < IMWD / 8; x++){
         c :> alteredGrid[id][x];
     }
@@ -260,12 +258,14 @@ int dealWithIt(int j, chanend c, uchar alteredGrid[IMHT][IMWD/8], uchar grid[IMH
 
     if((*linesReceived) == IMHT){
         // Finished this cycle
+        printf("Deal with it finished image\n");
         c <: WORKER_WAIT_FOR_NEXT_ROUND;
         return SERVER_FINISH_ROUND;
     }
 
     if((*lineToSend)+1 >= IMHT) {
         // Do nothing
+        printf("Deal with it no more image to send out\n");
         c <: WORKER_WAIT_FOR_NEXT_ROUND;
         return SERVER_CONTINUE;
     }else{
@@ -274,6 +274,7 @@ int dealWithIt(int j, chanend c, uchar alteredGrid[IMHT][IMWD/8], uchar grid[IMH
             for(int x = 0; x < IMWD / 8; x++){
                 alteredGrid[(*lineToSend)][x] = 0;
             }
+            printf("Line is clear so didn't send\n");
             (*linesReceived)++;
             (*lineToSend)++;
         }
@@ -292,30 +293,20 @@ int dealWithIt(int j, chanend c, uchar alteredGrid[IMHT][IMWD/8], uchar grid[IMH
 
  int gridDoesNotNeedProccessingAsItAndItsNeighboursAreEmpty(uchar grid[IMHT][IMWD/8], int* lineToSend){
      for(int x = 0; x < IMWD / 8; x++){
-         if(grid[(*lineToSend - 1 ) & (16-1)][x] != 0){
+         if(grid[(((*lineToSend) - 1 ) + IMHT)%IMHT][x] != 0){
              return NOT_EMPTY;
          }
-         if((grid[(*lineToSend) & (16-1)])[x] != 0){
+         if(grid[(((*lineToSend)) + IMHT)%IMHT][x] != 0){
              return NOT_EMPTY;
          }
-         if((grid[(*lineToSend + 1 ) & (16-1)])[x] != 0){
+         if(grid[(((*lineToSend) + 1 ) + IMHT)%IMHT][x] != 0){
              return NOT_EMPTY;
          }
      }
      return EMPTY;
  }
 
-void sendData(chanend c, uchar grid[IMHT][IMWD/8], int* lineToSend){
-    for(int x = 0; x < IMWD / 8; x++){
-        c <: grid[(*lineToSend - 1 ) & (16-1)][ x];
-    }
-    for(int x = 0; x < IMWD / 8; x++){
-        c <: grid[(*lineToSend) & (16-1)][ x];
-    }
-    for(int x = 0; x < IMWD / 8; x++){
-        c <: grid[(*lineToSend + 1 ) & (16-1)][ x];
-    }
-}
+
 
 void initWorker(int CPUId, chanend c){
     printf("Worker (%d): Start...\n", CPUId);
@@ -324,7 +315,7 @@ void initWorker(int CPUId, chanend c){
         uchar startLine[IMWD / 8], midLine[IMWD / 8], endLine[IMWD / 8], newLine[IMWD / 8];
 
         c :> lineId;
-        printf("Worker started proccessing line %d\n", lineId);
+        printf("Reading in line %d\n", lineId);
 
         for(int x = 0; x < IMWD / 8; x++){
             c :> startLine[x];
@@ -335,7 +326,7 @@ void initWorker(int CPUId, chanend c){
         for(int x = 0; x < IMWD / 8; x++){
             c :> endLine[x];
         }
-
+        printf("Worker started proccessing line %d\n", lineId);
         int started = 1;
         while(started){
             for(int x = 0; x<IMWD/8; x++){
@@ -368,19 +359,22 @@ void initWorker(int CPUId, chanend c){
                     }
                 }
             }
-
+            printf("Worker finished line %d\n", lineId);
             c <: lineId;
+            printf("Worker finished atfer send line %d\n", lineId);
             for(int x = 0; x < IMWD / 8; x++){
                 c <: newLine[x];
             }
-
+            printf("Worker Sent results of line %d\n", lineId);
             c :> lineId;
 
 
             if(lineId==WORKER_WAIT_FOR_NEXT_ROUND){
+                printf("WORKER_WAIT_FOR_NEXT_ROUND\n");
                 started = 0;
                 break;
             }
+            printf("BEfore worker given new line data\n");
             for(int x = 0; x < IMWD / 8; x++){
                 c :> startLine[x];
             }
@@ -390,6 +384,7 @@ void initWorker(int CPUId, chanend c){
             for(int x = 0; x < IMWD / 8; x++){
                 c :> endLine[x];
             }
+            printf("After worker given new line data\n");
 
         }
 
