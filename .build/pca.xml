@@ -429,6 +429,18 @@
 </fInfo>
 <fInfo name="ack_write_request" global="true" interface="i2c_slave_callback_if" specialize="false" noreturn="false" doNotSpecialize="false" numParams="0">
 </fInfo>
+<fInfo name="buttonListener" global="true" specialize="false" noreturn="true" doNotSpecialize="false" numParams="2">
+  <arg num="0" specialize="false">
+    <values>
+      <value type="unknown"/>
+    </values>
+  </arg>
+  <arg num="1" specialize="false">
+    <values>
+      <value type="unknown"/>
+    </values>
+  </arg>
+</fInfo>
 <fInfo name="dealWithIt" global="true" specialize="false" noreturn="false" doNotSpecialize="false" numParams="7">
   <arg num="0" specialize="false">
     <values>
@@ -484,7 +496,7 @@
     </values>
   </arg>
 </fInfo>
-<fInfo name="distributor" global="true" specialize="false" noreturn="false" doNotSpecialize="false" numParams="6">
+<fInfo name="distributor" global="true" specialize="false" noreturn="true" doNotSpecialize="false" numParams="6">
   <arg num="0" specialize="false">
     <values>
       <value type="unknown"/>
@@ -719,33 +731,6 @@
     </values>
   </arg>
 </fInfo>
-<fInfo name="initServer" global="true" specialize="false" noreturn="false" doNotSpecialize="false" numParams="5">
-  <arg num="0" specialize="false">
-    <values>
-      <value type="unknown"/>
-    </values>
-  </arg>
-  <arg num="1" specialize="false">
-    <values>
-      <value type="unknown"/>
-    </values>
-  </arg>
-  <arg num="2" specialize="false">
-    <values>
-      <value type="unknown"/>
-    </values>
-  </arg>
-  <arg num="3" specialize="false">
-    <values>
-      <value type="unknown"/>
-    </values>
-  </arg>
-  <arg num="4" specialize="false">
-    <values>
-      <value type="unknown"/>
-    </values>
-  </arg>
-</fInfo>
 <fInfo name="initWorker" global="true" specialize="false" noreturn="true" doNotSpecialize="false" numParams="2">
   <arg num="0" specialize="false">
     <values>
@@ -760,7 +745,6 @@
       <value type="intval"><intval isSigned="true" val="8"/></value>
       <value type="intval"><intval isSigned="true" val="9"/></value>
       <value type="intval"><intval isSigned="true" val="10"/></value>
-      <value type="intval"><intval isSigned="true" val="11"/></value>
     </values>
   </arg>
   <arg num="1" specialize="false">
@@ -921,6 +905,18 @@
   </arg>
   <arg num="3" specialize="false">
     <values>
+    </values>
+  </arg>
+</fInfo>
+<fInfo name="sendCurrentGameToOutStream" global="true" specialize="false" noreturn="false" doNotSpecialize="false" numParams="2">
+  <arg num="0" specialize="false">
+    <values>
+      <value type="unknown"/>
+    </values>
+  </arg>
+  <arg num="1" specialize="false">
+    <values>
+      <value type="unknown"/>
     </values>
   </arg>
 </fInfo>
