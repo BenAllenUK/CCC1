@@ -183,9 +183,12 @@ void distributor(chanend c_in, chanend c_out, chanend fromAcc, chanend workerCha
     }
 
   while(1){
+      printf("Before select\n");
       select {
           case workerChans[int j] :> int lineID:
-              int newRound = dealWithIt(j, workerChans[j], grids[k%2], grids[(k%2)+1], &linesReceived, &lineToSend, lineID);
+              printf("Worker output recieved: %d\n",lineID);
+              printf("%d, %d, %d");
+              int newRound = dealWithIt(j, workerChans[j], grids[k%2], grids[((k+1)%2)], &linesReceived, &lineToSend, lineID);
               if(newRound==SERVER_FINISH_ROUND){
                   printf("NewRound\n");
 
@@ -206,12 +209,14 @@ void distributor(chanend c_in, chanend c_out, chanend fromAcc, chanend workerCha
               }
               break;
           case buttonsChan :> int btnVal:
+              printf("Button\n");
               if(btnVal == 14){
                   leds <: 2;
                   sendCurrentGameToOutStream(c_out, grids[k%2]);
               }
               break;
           case fromAcc :> int accResponse:
+              printf("Acc\n");
               while(accResponse > 10){
                    printf("Board Tilted\n");
                    fromAcc :> accResponse;
@@ -220,7 +225,7 @@ void distributor(chanend c_in, chanend c_out, chanend fromAcc, chanend workerCha
               printf("Board level\n");
               break;
       }
-      printf("End of select\n");
+
    }
 }
 
