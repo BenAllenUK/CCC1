@@ -34,7 +34,7 @@
 <fDef name="sendData" global="true" noreturn="false" doNotSpecialize="false" numParams="3"/>
 <fDef name="send_stop_bit" global="true" interface="i2c_master_async_if" noreturn="false" doNotSpecialize="false" numParams="0"/>
 <fDef name="send_stop_bit" global="true" interface="i2c_master_if" noreturn="false" doNotSpecialize="false" numParams="0"/>
-<fDef name="sentNextNoneEmptyLineUpdatingLineCounters" global="true" noreturn="false" doNotSpecialize="false" numParams="4"/>
+<fDef name="sentNextNoneEmptyLineUpdatingLineCounters" global="true" noreturn="false" doNotSpecialize="false" numParams="5"/>
 <fDef name="shutdown" global="true" interface="i2c_master_async_if" noreturn="false" doNotSpecialize="false" numParams="0"/>
 <fDef name="shutdown" global="true" interface="i2c_master_if" noreturn="false" doNotSpecialize="false" numParams="0"/>
 <fDef name="shutdown" global="true" interface="i2c_slave_callback_if" noreturn="false" doNotSpecialize="false" numParams="0"/>
@@ -612,6 +612,13 @@
     </values>
   </arg>
 </fCall>
+<fCall name="printf" global="true" numArgs="1">
+  <arg num="0">
+    <values>
+      <value type="unknown"/>
+    </values>
+  </arg>
+</fCall>
 <fCall name="printf" global="true" numArgs="3">
   <arg num="0">
     <values>
@@ -629,7 +636,7 @@
     </values>
   </arg>
 </fCall>
-<fCall name="sentNextNoneEmptyLineUpdatingLineCounters" global="true" numArgs="4">
+<fCall name="sentNextNoneEmptyLineUpdatingLineCounters" global="true" numArgs="5">
   <arg num="0">
     <values>
       <value type="unknown"/>
@@ -650,9 +657,19 @@
       <value type="unknown"/>
     </values>
   </arg>
+  <arg num="4">
+    <values>
+      <value type="unknown"/>
+    </values>
+  </arg>
 </fCall>
-<fCall name="printf" global="true" numArgs="1">
+<fCall name="printf" global="true" numArgs="2">
   <arg num="0">
+    <values>
+      <value type="unknown"/>
+    </values>
+  </arg>
+  <arg num="1">
     <values>
       <value type="unknown"/>
     </values>
@@ -728,7 +745,7 @@
     </values>
   </arg>
 </fCall>
-<fCall name="sentNextNoneEmptyLineUpdatingLineCounters" global="true" numArgs="4">
+<fCall name="sentNextNoneEmptyLineUpdatingLineCounters" global="true" numArgs="5">
   <arg num="0">
     <values>
       <value type="unknown"/>
@@ -745,6 +762,11 @@
     </values>
   </arg>
   <arg num="3">
+    <values>
+      <value type="unknown"/>
+    </values>
+  </arg>
+  <arg num="4">
     <values>
       <value type="unknown"/>
     </values>
@@ -963,6 +985,54 @@
   <arg num="1">
     <values>
       <value type="intval"><intval isSigned="true" val="1"/></value>
+    </values>
+  </arg>
+</fCall>
+<fCall name="printf" global="true" numArgs="1">
+  <arg num="0">
+    <values>
+      <value type="unknown"/>
+    </values>
+  </arg>
+</fCall>
+<fCall name="read_reg" global="true" numArgs="4">
+  <arg num="0">
+    <passThroughArg param="0" caller="accelerometer" global="true"/>
+    <values>
+    </values>
+  </arg>
+  <arg num="1">
+    <values>
+      <value type="intval"><intval isSigned="true" val="30"/></value>
+    </values>
+  </arg>
+  <arg num="2">
+    <values>
+      <value type="intval"><intval isSigned="true" val="0"/></value>
+    </values>
+  </arg>
+  <arg num="3">
+    <values>
+      <value type="unknown"/>
+    </values>
+  </arg>
+</fCall>
+<fCall name="read_acceleration" global="true" numArgs="2">
+  <arg num="0">
+    <passThroughArg param="0" caller="accelerometer" global="true"/>
+    <values>
+    </values>
+  </arg>
+  <arg num="1">
+    <values>
+      <value type="intval"><intval isSigned="true" val="1"/></value>
+    </values>
+  </arg>
+</fCall>
+<fCall name="printf" global="true" numArgs="1">
+  <arg num="0">
+    <values>
+      <value type="unknown"/>
     </values>
   </arg>
 </fCall>

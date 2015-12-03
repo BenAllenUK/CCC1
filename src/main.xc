@@ -129,11 +129,11 @@ void sendData(chanend c, uchar grid[IMHT][IMWD/8], int* lineToSend){
     }
 }
 
-int sentNextNoneEmptyLineUpdatingLineCounters(chanend workerChan, uchar grids[2][IMHT][IMWD / 8], int* linesReceived, int* lineToSend){
+int sentNextNoneEmptyLineUpdatingLineCounters(chanend workerChan, uchar grid[IMHT][IMWD / 8], uchar alteredGrid[IMHT][IMWD / 8], int* linesReceived, int* lineToSend){
     (*lineToSend)++;
-      while(gridDoesNotNeedProccessingAsItAndItsNeighboursAreEmpty(grids[0], lineToSend)==EMPTY && (lineToSend) < IMHT){
+      while(gridDoesNotNeedProccessingAsItAndItsNeighboursAreEmpty(grid, lineToSend)==EMPTY && (lineToSend) < IMHT){
           for(int x = 0; x < IMWD / 8; x++){
-              grids[0][(*lineToSend)][x] = 0;
+              alteredGrid[(*lineToSend)][x] = 0;
           }
           //printf("Pre Server: Line is clear so didn't send\n");
           (*linesReceived)++;
@@ -144,7 +144,7 @@ int sentNextNoneEmptyLineUpdatingLineCounters(chanend workerChan, uchar grids[2]
       }
 
       workerChan <: *lineToSend;
-      sendData(workerChan, grids[0], lineToSend);
+      sendData(workerChan, grid, lineToSend);
       return WORKER_SENT;
 }
 
@@ -160,6 +160,7 @@ void distributor(chanend c_in, chanend c_out, chanend fromAcc, chanend workerCha
 
   // Halt processing till button press
   while(btnResponse != 13){
+      printf("Wrong button\n");
       buttonsChan  :> btnResponse;
   }
 
@@ -197,34 +198,31 @@ void distributor(chanend c_in, chanend c_out, chanend fromAcc, chanend workerCha
 
     for(int i = 0; i < NUMCPUs; i++){
         //printf("Pre Server: Sending initial data to core: %d\n", i);
-        int tmp = sentNextNoneEmptyLineUpdatingLineCounters(workerChans[i], grids, &linesReceived, &lineToSend);
+        int tmp = sentNextNoneEmptyLineUpdatingLineCounters(workerChans[i], grids[0], grids[1], &linesReceived, &lineToSend);
         if(tmp == WORKER_WAIT_FOR_NEXT_ROUND){
             break;
         }
     }
 
   while(1){
-      //printf("Server: Before select\n");
       [[ordered]]
       select {
           case buttonsChan :> int btnVal:
-              printf("Server: Button\n");
               if(btnVal == 14){
+                  printf("Iteration: %d\n", k);
                   leds <: 2;
                   sendCurrentGameToOutStream(c_out, grids[k%2]);
+              }else{
+                  printf("Wrong button\n");
               }
               break;
           case fromAcc :> int accResponse:
-              printf("Server: Acc\n");
-              while(accResponse > 10){
-                   printf("Board Tilted\n");
-                   fromAcc :> accResponse;
-                   leds <: 8;
-              }
+              printf("Board Tilted\n");
+              leds <: 8;
+              fromAcc :> accResponse;
               printf("Board level\n");
               break;
           case workerChans[int j] :> int lineID:
-            //printf("Server: Worker lineID recieved: %d\n",lineID);
             int newRound = dealWithIt(j, workerChans[j], grids[(k+1)%2], grids[(k%2)], &linesReceived, &lineToSend, lineID);
             if(newRound==SERVER_FINISH_ROUND){
 
@@ -234,15 +232,11 @@ void distributor(chanend c_in, chanend c_out, chanend fromAcc, chanend workerCha
                 leds <: ((k)%2);
 
                 for(int i = 0; i < NUMCPUs; i++){
-                    //printf("Server: Sending initial data to core: %d\n", i);
-                    int tmp = sentNextNoneEmptyLineUpdatingLineCounters(workerChans[i], grids, &linesReceived, &lineToSend);
+                    int tmp = sentNextNoneEmptyLineUpdatingLineCounters(workerChans[i], grids[(k%2)], grids[(k+1)%2], &linesReceived, &lineToSend);
                     if(tmp == WORKER_WAIT_FOR_NEXT_ROUND){
                         break;
                     }
                 }
-                //printf("Server: end sending out new\n");
-            }else{
-                //printf("Server: Just carry on\n");
             }
             break;
       }
@@ -369,6 +363,7 @@ void initWorker(int CPUId, chanend c){
             //printf("Worker: finished line %d\n", lineId);
             c <: lineId;
             //printf("Worker: finished atfer send line %d\n", lineId);
+
             for(int x = 0; x < IMWD / 8; x++){
                 c <: newLine[x];
             }
@@ -448,7 +443,7 @@ void DataOutStream(char outfname[], chanend c_in)
 void accelerometer(client interface i2c_master_if i2c, chanend toDist) {
     i2c_regop_res_t result;
     char status_data = 0;
-    int tilted = 0;
+
 
 
   // Configure FXOS8700EQ
@@ -475,13 +470,23 @@ void accelerometer(client interface i2c_master_if i2c, chanend toDist) {
     int x = read_acceleration(i2c, FXOS8700EQ_OUT_X_MSB);
 
     //send signal to distributor after first tilt
-    if (!tilted) {
-      if (x>30) {
-        tilted = 1 - tilted;
-        toDist <: 1;
-      }
-    }
+    if (x>30) {
+        printf("Acc: slanted");
+        toDist <: x;
 
+      do {
+          do {
+                status_data = i2c.read_reg(FXOS8700EQ_I2C_ADDR, FXOS8700EQ_DR_STATUS, result);
+              } while (!status_data & 0x08);
+
+              //get new x-axis tilt value
+              x = read_acceleration(i2c, FXOS8700EQ_OUT_X_MSB);
+      } while (x>30);
+
+      printf("Acc: flat");
+      toDist <: x;
+
+    }
   }
 }
 
