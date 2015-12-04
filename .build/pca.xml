@@ -740,10 +740,6 @@
       <value type="intval"><intval isSigned="true" val="3"/></value>
       <value type="intval"><intval isSigned="true" val="4"/></value>
       <value type="intval"><intval isSigned="true" val="5"/></value>
-      <value type="intval"><intval isSigned="true" val="6"/></value>
-      <value type="intval"><intval isSigned="true" val="7"/></value>
-      <value type="intval"><intval isSigned="true" val="8"/></value>
-      <value type="intval"><intval isSigned="true" val="9"/></value>
     </values>
   </arg>
   <arg num="1" specialize="false">
