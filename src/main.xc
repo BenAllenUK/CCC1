@@ -8,8 +8,8 @@
 #include "pgmIO.h"
 #include "i2c.h"
 
-#define  IMHT 16                  //image height
-#define  IMWD 16                  //image width
+#define  IMHT 64                  //image height
+#define  IMWD 64                  //image width
 #define  NUMCPUs 11
 
 //#define DEBUG
@@ -225,7 +225,7 @@ void distributor(chanend c_in, chanend c_out, chanend fromAcc, chanend workerCha
           case workerChans[int j] :> int lineID:
             int newRound = dealWithIt(j, workerChans[j], grids[(k+1)%2], grids[(k%2)], &linesReceived, &lineToSend, lineID);
             if(newRound==SERVER_FINISH_ROUND){
-
+                sendCurrentGameToOutStream(c_out, grids[k%2]);
                 linesReceived = 0;
                 lineToSend = -1;
                 k++;
@@ -311,13 +311,20 @@ int dealWithIt(int j, chanend c, uchar alteredGrid[IMHT][IMWD/8], uchar grid[IMH
 
 void initWorker(int CPUId, chanend c){
     printf("Worker: (%d): Start...\n", CPUId);
+
+    int lineId;
+    uchar startLine[IMWD / 8], midLine[IMWD / 8], endLine[IMWD / 8], newLine[IMWD / 8];
+
     while(1){
-        int lineId;
-        uchar startLine[IMWD / 8], midLine[IMWD / 8], endLine[IMWD / 8], newLine[IMWD / 8];
 
         c :> lineId;
-        //printf("Worker:Reading in line %d\n", lineId);
 
+
+        if(lineId==WORKER_WAIT_FOR_NEXT_ROUND){
+            //printf("Worker: WORKER_WAIT_FOR_NEXT_ROUND\n");
+            continue;
+        }
+        //printf("Worker: Before worker given new line data\n");
         for(int x = 0; x < IMWD / 8; x++){
             c :> startLine[x];
         }
@@ -327,69 +334,51 @@ void initWorker(int CPUId, chanend c){
         for(int x = 0; x < IMWD / 8; x++){
             c :> endLine[x];
         }
-        //printf("Worker: started proccessing line %d\n", lineId);
-        int started = 1;
-        while(started){
-            for(int x = 0; x<IMWD/8; x++){
-                newLine[x] = 0;
-            }
-
-            for(int x = 0; x<IMWD; x++)
-            {
-
-                int l = (x-1+IMWD) % IMWD;
-                int r = (x+1) % IMWD;
-                int neighbours =
-                  ((midLine[l/8] >> (7 - (l%8)) ) & 1)
-                + ((midLine[r/8] >> (7 - (r%8)) ) & 1)
-                + ((startLine[l/8] >> (7 - (l%8)) ) & 1)
-                + ((startLine[r/8] >> (7 - (r%8)) ) & 1)
-                + ((startLine[x/8] >> (7 - (x%8)) ) & 1)
-                + ((endLine[l/8] >> (7 - (l%8)) ) & 1)
-                + ((endLine[r/8] >> (7 - (r%8)) ) & 1)
-                + ((endLine[x/8] >> (7 - (x%8)) ) & 1);
-                int living = ((midLine[x/8] >> (7 - (x%8)) ) & 1);
-
-                if(living==1){
-                    if(neighbours==2 || neighbours==3){
-                       newLine[x/8] += (1 << (7-(x%8)));
-                    }
-                }else if((living!=1)){
-                    if(neighbours == 3){
-                        newLine[x/8] += (1 << (7-(x%8)));
-                    }
-                }
-            }
-            //printf("Worker: finished line %d\n", lineId);
-            c <: lineId;
-            //printf("Worker: finished atfer send line %d\n", lineId);
-
-            for(int x = 0; x < IMWD / 8; x++){
-                c <: newLine[x];
-            }
-            //printf("Worker: Sent results of line %d\n", lineId);
-            c :> lineId;
+        //printf("Worker: After worker given new line data\n");
 
 
-            if(lineId==WORKER_WAIT_FOR_NEXT_ROUND){
-                //printf("Worker: WORKER_WAIT_FOR_NEXT_ROUND\n");
-                started = 0;
-                break;
-            }
-            //printf("Worker: Before worker given new line data\n");
-            for(int x = 0; x < IMWD / 8; x++){
-                c :> startLine[x];
-            }
-            for(int x = 0; x < IMWD / 8; x++){
-                c :> midLine[x];
-            }
-            for(int x = 0; x < IMWD / 8; x++){
-                c :> endLine[x];
-            }
-            //printf("Worker: After worker given new line data\n");
 
+
+
+
+        for(int x = 0; x<IMWD/8; x++){
+            newLine[x] = 0;
         }
 
+        for(int x = 0; x<IMWD; x++)
+        {
+
+            int l = (x-1+IMWD) % IMWD;
+            int r = (x+1) % IMWD;
+            int neighbours =
+              ((midLine[l/8] >> (7 - (l%8)) ) & 1)
+            + ((midLine[r/8] >> (7 - (r%8)) ) & 1)
+            + ((startLine[l/8] >> (7 - (l%8)) ) & 1)
+            + ((startLine[r/8] >> (7 - (r%8)) ) & 1)
+            + ((startLine[x/8] >> (7 - (x%8)) ) & 1)
+            + ((endLine[l/8] >> (7 - (l%8)) ) & 1)
+            + ((endLine[r/8] >> (7 - (r%8)) ) & 1)
+            + ((endLine[x/8] >> (7 - (x%8)) ) & 1);
+            int living = ((midLine[x/8] >> (7 - (x%8)) ) & 1);
+
+            if(living==1){
+                if(neighbours==2 || neighbours==3){
+                   newLine[x/8] += (1 << (7-(x%8)));
+                }
+            }else if((living!=1)){
+                if(neighbours == 3){
+                    newLine[x/8] += (1 << (7-(x%8)));
+                }
+            }
+        }
+        //printf("Worker: finished line %d\n", lineId);
+        c <: lineId;
+        //printf("Worker: finished atfer send line %d\n", lineId);
+
+        for(int x = 0; x < IMWD / 8; x++){
+            c <: newLine[x];
+        }
+        //printf("Worker: Sent results of line %d\n", lineId);
     }
 }
 
@@ -512,7 +501,7 @@ int main(void) {
   par {
     on tile[0]: i2c_master(i2c, 1, p_scl, p_sda, 10);   //server thread providing accelerometer data
     on tile[0]: accelerometer(i2c[0],c_control);        //client thread reading accelerometer data
-    on tile[0]: DataInStream("test.pgm", c_inIO);          //thread to read in a PGM image
+    on tile[0]: DataInStream("64x64.pgm", c_inIO);          //thread to read in a PGM image
     on tile[0]: DataOutStream("testout.pgm", c_outIO);       //thread to write out a PGM image
     on tile[0]: distributor(c_inIO, c_outIO, c_control, workerChans, leds, buttonsChan);//thread to coordinate work on image
     on tile[0]: buttonListener(buttons, buttonsChan);
