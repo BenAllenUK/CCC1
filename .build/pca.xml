@@ -496,7 +496,7 @@
     </values>
   </arg>
 </fInfo>
-<fInfo name="distributor" global="true" specialize="false" noreturn="true" doNotSpecialize="false" numParams="6">
+<fInfo name="distributor" global="true" specialize="false" noreturn="true" doNotSpecialize="false" numParams="7">
   <arg num="0" specialize="false">
     <values>
       <value type="unknown"/>
@@ -523,6 +523,11 @@
     </values>
   </arg>
   <arg num="5" specialize="false">
+    <values>
+      <value type="unknown"/>
+    </values>
+  </arg>
+  <arg num="6" specialize="false">
     <values>
       <value type="unknown"/>
     </values>
@@ -744,7 +749,6 @@
       <value type="intval"><intval isSigned="true" val="7"/></value>
       <value type="intval"><intval isSigned="true" val="8"/></value>
       <value type="intval"><intval isSigned="true" val="9"/></value>
-      <value type="intval"><intval isSigned="true" val="10"/></value>
     </values>
   </arg>
   <arg num="1" specialize="false">

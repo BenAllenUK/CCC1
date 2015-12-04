@@ -8,9 +8,9 @@
 #include "pgmIO.h"
 #include "i2c.h"
 
-#define  IMHT 64                  //image height
-#define  IMWD 64                  //image width
-#define  NUMCPUs 11
+#define  IMHT 128                  //image height
+#define  IMWD 128                  //image width
+#define  NUMCPUs 10
 
 //#define DEBUG
 
@@ -54,6 +54,9 @@ int indexer(int y, int x){
 
 void DataInStream(char infname[], chanend c_out)
 {
+  timer t;
+  uint32_t  startTime;
+  t :> startTime;
   int res;
   uchar line[ IMWD ];
   printf( "DataInStream: Start...\n" );
@@ -79,7 +82,9 @@ void DataInStream(char infname[], chanend c_out)
 
     }
   }
-
+  uint32_t  endTime;
+  t :> endTime;
+  printf("Read in time: %d sec\n",(endTime - startTime) / 100000000);
   //Close PGM image file
   _closeinpgm();
   printf( "DataInStream:Done...\n" );
@@ -104,7 +109,7 @@ void printGrid(uchar grid[IMHT][IMWD / 8]){
 }
 
 void sendCurrentGameToOutStream(chanend c_out, uchar  grid[IMHT][IMWD/8]){
-    printf("Updated\n");
+    printf("Start writing\n");
     //syncronise printouts
     c_out <: 0;
     for( int y = 0; y < IMHT; y++ ) {   //go through all lines
@@ -114,6 +119,7 @@ void sendCurrentGameToOutStream(chanend c_out, uchar  grid[IMHT][IMWD/8]){
     }
     //syncronise printouts
     c_out <: 0;
+    printf("Finished writing\n");
 }
 
 void sendData(chanend c, uchar grid[IMHT][IMWD/8], int* lineToSend){
@@ -148,7 +154,7 @@ int sentNextNoneEmptyLineUpdatingLineCounters(chanend workerChan, uchar grid[IMH
       return WORKER_SENT;
 }
 
-void distributor(chanend c_in, chanend c_out, chanend fromAcc, chanend workerChans[NUMCPUs], out port leds, chanend buttonsChan)
+void distributor(chanend c_in, chanend c_out, chanend fromAcc, chanend workerChans[NUMCPUs], out port leds, chanend buttonsChan, chanend fileSizeChan)
 {
   printf("Distributor: Start...\nDistributor: Waiting for button press\n");
   uchar val;
@@ -177,17 +183,6 @@ void distributor(chanend c_in, chanend c_out, chanend fromAcc, chanend workerCha
     }
   }
   printf("Finished reading image\n");
-
-  printf("Printout of Original\n");
-  //syncronise printouts
-  c_out <: 0;
-  for( int y = 0; y < IMHT; y++) {   //go through all lines
-      for( int x = 0; x < IMWD/8; x++) { //go through each pixel per line
-             c_out <: grids[0][y][x]; //send some modified pixel out
-      }
-    }
-  //syncronise printouts
-  c_out <: 0;
 
   printf( "Processing image:, size = %dx%d\n", IMHT, IMWD );
   int k = 0;
@@ -225,7 +220,7 @@ void distributor(chanend c_in, chanend c_out, chanend fromAcc, chanend workerCha
           case workerChans[int j] :> int lineID:
             int newRound = dealWithIt(j, workerChans[j], grids[(k+1)%2], grids[(k%2)], &linesReceived, &lineToSend, lineID);
             if(newRound==SERVER_FINISH_ROUND){
-                sendCurrentGameToOutStream(c_out, grids[k%2]);
+
                 linesReceived = 0;
                 lineToSend = -1;
                 k++;
@@ -410,11 +405,10 @@ void DataOutStream(char outfname[], chanend c_in)
                     newChar = (uchar)(255);
                 }
                 line[x + z] = newChar;
-                printf( "-%4.1d ", newChar );
+                //printf( "%s ", (char) (newChar!=255?"\u25A0":" ") );
             }
-            printf( " " );
         }
-        printf( "\n" );
+       // printf( "\n" );
         _writeoutline( line, IMWD );
       }
       //sync after printout
@@ -460,7 +454,6 @@ void accelerometer(client interface i2c_master_if i2c, chanend toDist) {
 
     //send signal to distributor after first tilt
     if (x>30) {
-        printf("Acc: slanted");
         toDist <: x;
 
       do {
@@ -489,6 +482,19 @@ void buttonListener(in port b, chanend toUserAnt) {
   }
 }
 
+/*
+void readFileSize(const char *filename, chanend fileSizeChan){
+    FILE* f = fopen(filename, "r");
+    int i;
+    int j;
+    fscanf(f, "P5\n%d %d", &i, &j);
+
+    fileSizeChan :> i;
+    fileSizeChan :> j;
+
+    fclose(f);
+}
+*/
 
 int main(void) {
 
@@ -497,18 +503,20 @@ int main(void) {
   chan c_inIO, c_outIO, c_control;    //extend your channel definitions here
   chan workerChans[NUMCPUs];
   chan buttonsChan;
+  chan fileSizeChan;
 
   par {
+    //on tile[0]: readFileSize("test.pgm", fileSizeChan);
     on tile[0]: i2c_master(i2c, 1, p_scl, p_sda, 10);   //server thread providing accelerometer data
     on tile[0]: accelerometer(i2c[0],c_control);        //client thread reading accelerometer data
-    on tile[0]: DataInStream("64x64.pgm", c_inIO);          //thread to read in a PGM image
+    on tile[0]: DataInStream("128x128.pgm", c_inIO);          //thread to read in a PGM image
     on tile[0]: DataOutStream("testout.pgm", c_outIO);       //thread to write out a PGM image
-    on tile[0]: distributor(c_inIO, c_outIO, c_control, workerChans, leds, buttonsChan);//thread to coordinate work on image
+    on tile[0]: distributor(c_inIO, c_outIO, c_control, workerChans, leds, buttonsChan, fileSizeChan);//thread to coordinate work on image
     on tile[0]: buttonListener(buttons, buttonsChan);
-    par (int i = 0; i < 3; i++){
+    par (int i = 0; i < 2; i++){
         on tile[0]: initWorker(i, workerChans[i]);
     }
-    par (int i = 3; i < NUMCPUs; i++){
+    par (int i = 2; i < NUMCPUs; i++){
         on tile[1]: initWorker(i, workerChans[i]);
     }
   }
