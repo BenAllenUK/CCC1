@@ -8,8 +8,8 @@
 #include "pgmIO.h"
 #include "i2c.h"
 
-#define  IMHT 512                  //image height
-#define  IMWD 512                  //image width
+#define  IMHT 128                  //image height
+#define  IMWD 128                  //image width
 #define  NUMCPUs 10
 
 //#define DEBUG
@@ -41,6 +41,9 @@ on tile[0] : out port leds = XS1_PORT_4F;   //port to access xCore-200 LEDs
 
 #define EMPTY -1
 #define NOT_EMPTY 0
+
+#define PERFORM_LINE_OPTIMIZATION 1
+#define PERFORM_CHAR_OPTIMIZATION 1
 
 void initServer( chanend workers[NUMCPUs], uchar grid[IMHT][IMWD/8], int* linesReceived, int* lineToSend, uchar alteredGrid[IMHT][IMWD/8]);
 void initWorker(int CPUId, chanend c);
@@ -97,7 +100,12 @@ void printBin(uchar num){
     }
 
 }
-
+void printLine(uchar grid[IMWD / 8]){
+    for(int y = 0; y<IMWD / 8; y++){
+        printBin(grid[y]);
+    }
+    printf("\n");
+}
 void printGrid(uchar grid[IMHT][IMWD / 8]){
     for(int x = 0; x<IMHT; x++){
         for(int y = 0; y<IMWD / 8; y++){
@@ -137,6 +145,7 @@ void sendData(chanend c, uchar grid[IMHT][IMWD/8], int* lineToSend){
 
 int sentNextNoneEmptyLineUpdatingLineCounters(chanend workerChan, uchar grid[IMHT][IMWD / 8], uchar alteredGrid[IMHT][IMWD / 8], int* linesReceived, int* lineToSend){
     (*lineToSend)++;
+
       while(gridDoesNotNeedProccessingAsItAndItsNeighboursAreEmpty(grid, lineToSend)==EMPTY && (lineToSend) < IMHT){
           for(int x = 0; x < IMWD / 8; x++){
               alteredGrid[(*lineToSend)][x] = 0;
@@ -201,7 +210,8 @@ void distributor(chanend c_in, chanend c_out, chanend fromAcc, chanend workerCha
             break;
         }
     }
-
+  int average = 0;
+  int num = 0;
   while(1){
       [[ordered]]
       select {
@@ -223,7 +233,6 @@ void distributor(chanend c_in, chanend c_out, chanend fromAcc, chanend workerCha
           case workerChans[int j] :> int lineID:
             int newRound = dealWithIt(j, workerChans[j], grids[(k+1)%2], grids[(k%2)], &linesReceived, &lineToSend, lineID);
             if(newRound==SERVER_FINISH_ROUND){
-
                 linesReceived = 0;
                 lineToSend = -1;
                 k++;
@@ -237,7 +246,11 @@ void distributor(chanend c_in, chanend c_out, chanend fromAcc, chanend workerCha
                 }
                 if(k%100 == 0){
                     t :> endTime;
-                    printf("Time for 100 generations: %d ms\n",(endTime - startTime) / 100000);
+                    average += (endTime - startTime) / 100000;
+                    num++;
+                    if(num == 20){
+                    printf("after 20 av: %d ms\n", (average / num));
+                    }
                     startTime = endTime;
                 }
             }
@@ -270,7 +283,8 @@ int dealWithIt(int j, chanend c, uchar alteredGrid[IMHT][IMWD/8], uchar grid[IMH
         return SERVER_CONTINUE;
     }else{
         (*lineToSend)++;
-        while(gridDoesNotNeedProccessingAsItAndItsNeighboursAreEmpty(grid, lineToSend)==EMPTY && (*lineToSend) < IMHT){
+
+        while(PERFORM_LINE_OPTIMIZATION == 1 && gridDoesNotNeedProccessingAsItAndItsNeighboursAreEmpty(grid, lineToSend)==EMPTY && (*lineToSend) < IMHT){
             for(int x = 0; x < IMWD / 8; x++){
                 alteredGrid[(*lineToSend)][x] = 0;
             }
@@ -296,6 +310,7 @@ int dealWithIt(int j, chanend c, uchar alteredGrid[IMHT][IMWD/8], uchar grid[IMH
 }
 
  int gridDoesNotNeedProccessingAsItAndItsNeighboursAreEmpty(uchar grid[IMHT][IMWD/8], int* lineToSend){
+
      for(int x = 0; x < IMWD / 8; x++){
          if(grid[(((*lineToSend) - 1 ) + IMHT)%IMHT][x] != 0){
              return NOT_EMPTY;
@@ -307,6 +322,7 @@ int dealWithIt(int j, chanend c, uchar alteredGrid[IMHT][IMWD/8], uchar grid[IMH
              return NOT_EMPTY;
          }
      }
+
      return EMPTY;
  }
 
@@ -350,27 +366,52 @@ void initWorker(int CPUId, chanend c){
 
         for(int x = 0; x<IMWD; x++)
         {
-
             int l = (x-1+IMWD) % IMWD;
             int r = (x+1) % IMWD;
-            int neighbours =
-              ((midLine[l/8] >> (7 - (l%8)) ) & 1)
-            + ((midLine[r/8] >> (7 - (r%8)) ) & 1)
-            + ((startLine[l/8] >> (7 - (l%8)) ) & 1)
-            + ((startLine[r/8] >> (7 - (r%8)) ) & 1)
-            + ((startLine[x/8] >> (7 - (x%8)) ) & 1)
-            + ((endLine[l/8] >> (7 - (l%8)) ) & 1)
-            + ((endLine[r/8] >> (7 - (r%8)) ) & 1)
-            + ((endLine[x/8] >> (7 - (x%8)) ) & 1);
-            int living = ((midLine[x/8] >> (7 - (x%8)) ) & 1);
-
-            if(living==1){
-                if(neighbours==2 || neighbours==3){
-                   newLine[x/8] += (1 << (7-(x%8)));
+            int shouldProcessBlock = 1;
+            // If we are at a new char then
+            if(x % 8 == 0 && PERFORM_CHAR_OPTIMIZATION == 1){
+                // Test to see whether any of the neighbours have values in them
+                int thisCharIndex = x / 8;
+                int prevCharIndex = ((x / 8) - 1 + (IMWD / 8)) % (IMWD / 8);
+                int nextCharIndex = ((x / 8) + 1 + (IMWD / 8)) % (IMWD / 8);
+//                printf("X T:%d \n", thisCharIndex);
+                int verticalNeighbours = ((startLine[thisCharIndex] >> 0) & 1);
+                verticalNeighbours += ((midLine[prevCharIndex] >> 0) & 1);
+                verticalNeighbours += ((endLine[prevCharIndex] >> 0) & 1);
+                verticalNeighbours += ((startLine[nextCharIndex] >> 7) & 1);
+                verticalNeighbours += ((midLine[nextCharIndex] >> 7) & 1);
+                verticalNeighbours += ((endLine[nextCharIndex] >> 7) & 1);
+//                printf("V: %d\n", verticalNeighbours);
+                // If neighbours dont have characters in them then
+                if(midLine[x/8] == 0 && startLine[x/8] == 0 && endLine[x/8] == 0 && verticalNeighbours == 0){
+                    // Skip to next character block
+                    x+= 7;
+                    shouldProcessBlock = 0;
                 }
-            }else if((living!=1)){
-                if(neighbours == 3){
-                    newLine[x/8] += (1 << (7-(x%8)));
+
+            }
+            // Otherwise we should process this symbol set
+            if(shouldProcessBlock == 1){
+                int neighbours =
+                  ((midLine[l/8] >> (7 - (l%8)) ) & 1)
+                + ((midLine[r/8] >> (7 - (r%8)) ) & 1)
+                + ((startLine[l/8] >> (7 - (l%8)) ) & 1)
+                + ((startLine[r/8] >> (7 - (r%8)) ) & 1)
+                + ((startLine[x/8] >> (7 - (x%8)) ) & 1)
+                + ((endLine[l/8] >> (7 - (l%8)) ) & 1)
+                + ((endLine[r/8] >> (7 - (r%8)) ) & 1)
+                + ((endLine[x/8] >> (7 - (x%8)) ) & 1);
+                int living = ((midLine[x/8] >> (7 - (x%8)) ) & 1);
+
+                if(living==1){
+                    if(neighbours==2 || neighbours==3){
+                       newLine[x/8] += (1 << (7-(x%8)));
+                    }
+                }else if((living!=1)){
+                    if(neighbours == 3){
+                        newLine[x/8] += (1 << (7-(x%8)));
+                    }
                 }
             }
         }
@@ -526,7 +567,7 @@ int main(void) {
     //on tile[0]: readFileSize("test.pgm", fileSizeChan);
     on tile[0]: i2c_master(i2c, 1, p_scl, p_sda, 10);   //server thread providing accelerometer data
     on tile[0]: accelerometer(i2c[0],c_acc);        //client thread reading accelerometer data
-    on tile[0]: DataInStream("512x512.pgm", c_inIO);          //thread to read in a PGM image
+    on tile[0]: DataInStream("128-blank.pgm", c_inIO);          //thread to read in a PGM image
     on tile[0]: DataOutStream("testout.pgm", c_outIO);       //thread to write out a PGM image
     on tile[0]: distributor(c_inIO, c_outIO, c_acc, workerChans, leds, buttonsChan);//thread to coordinate work on image
     on tile[0]: buttonListener(buttons, buttonsChan);
