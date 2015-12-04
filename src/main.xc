@@ -8,8 +8,8 @@
 #include "pgmIO.h"
 #include "i2c.h"
 
-#define  IMHT 128                  //image height
-#define  IMWD 128                  //image width
+#define  IMHT 512                  //image height
+#define  IMWD 512                  //image width
 #define  NUMCPUs 10
 
 //#define DEBUG
@@ -42,17 +42,17 @@ on tile[0] : out port leds = XS1_PORT_4F;   //port to access xCore-200 LEDs
 #define EMPTY -1
 #define NOT_EMPTY 0
 
-void initServer( chanend workers[NUMCPUs], uchar grid[IMHT][IMWD/8], int* linesReceived, int* lineToSend, uchar alteredGrid[IMHT][IMWD/8]);
-void initWorker(int CPUId, chanend c);
-int dealWithIt(int j, chanend c, uchar alteredGrid[IMHT][IMWD/8], uchar grid[IMHT][IMWD/8], int* linesReceived, int* lineToSend, int id);
-void sendData(chanend c, uchar grid[IMHT][IMWD/8], int* lineToSend);
+void initServer( streaming chanend workers[NUMCPUs], uchar grid[IMHT][IMWD/8], int* linesReceived, int* lineToSend, uchar alteredGrid[IMHT][IMWD/8]);
+void initWorker(int CPUId, streaming chanend c);
+int dealWithIt(int j, streaming chanend c, uchar alteredGrid[IMHT][IMWD/8], uchar grid[IMHT][IMWD/8], int* linesReceived, int* lineToSend, int id);
+void sendData(streaming chanend c, uchar grid[IMHT][IMWD/8], int* lineToSend);
 int gridDoesNotNeedProccessingAsItAndItsNeighboursAreEmpty(uchar grid[IMHT][IMWD/8], int* lineToSend);
 
 int indexer(int y, int x){
     return y*IMWD + x;
 }
 
-void DataInStream(char infname[], chanend c_out)
+void DataInStream(char infname[], streaming chanend c_out)
 {
   timer t;
   uint32_t  startTime;
@@ -108,7 +108,7 @@ void printGrid(uchar grid[IMHT][IMWD / 8]){
     printf("\n");
 }
 
-void sendCurrentGameToOutStream(chanend c_out, uchar  grid[IMHT][IMWD/8]){
+void sendCurrentGameToOutStream(streaming chanend c_out, uchar  grid[IMHT][IMWD/8]){
     printf("Start writing\n");
     //syncronise printouts
     c_out <: 0;
@@ -122,7 +122,7 @@ void sendCurrentGameToOutStream(chanend c_out, uchar  grid[IMHT][IMWD/8]){
     printf("Finished writing\n");
 }
 
-void sendData(chanend c, uchar grid[IMHT][IMWD/8], int* lineToSend){
+void sendData(streaming chanend c, uchar grid[IMHT][IMWD/8], int* lineToSend){
     //printf("sendData: sending data from line %d\n", *lineToSend);
     for(int x = 0; x < IMWD / 8; x++){
         c <: grid[(((*lineToSend) - 1 ) + IMHT)%IMHT][ x];
@@ -135,7 +135,7 @@ void sendData(chanend c, uchar grid[IMHT][IMWD/8], int* lineToSend){
     }
 }
 
-int sentNextNoneEmptyLineUpdatingLineCounters(chanend workerChan, uchar grid[IMHT][IMWD / 8], uchar alteredGrid[IMHT][IMWD / 8], int* linesReceived, int* lineToSend){
+int sentNextNoneEmptyLineUpdatingLineCounters(streaming chanend workerChan, uchar grid[IMHT][IMWD / 8], uchar alteredGrid[IMHT][IMWD / 8], int* linesReceived, int* lineToSend){
     (*lineToSend)++;
       while(gridDoesNotNeedProccessingAsItAndItsNeighboursAreEmpty(grid, lineToSend)==EMPTY && (lineToSend) < IMHT){
           for(int x = 0; x < IMWD / 8; x++){
@@ -154,7 +154,7 @@ int sentNextNoneEmptyLineUpdatingLineCounters(chanend workerChan, uchar grid[IMH
       return WORKER_SENT;
 }
 
-void distributor(chanend c_in, chanend c_out, chanend fromAcc, chanend workerChans[NUMCPUs], out port leds, chanend buttonsChan, chanend fileSizeChan)
+void distributor(streaming chanend c_in, streaming chanend c_out, chanend fromAcc, streaming chanend workerChans[NUMCPUs], out port leds, chanend buttonsChan)
 {
   printf("Distributor: Start...\nDistributor: Waiting for button press\n");
   uchar val;
@@ -188,7 +188,10 @@ void distributor(chanend c_in, chanend c_out, chanend fromAcc, chanend workerCha
   int k = 0;
   int linesReceived = 0;
   int lineToSend = -1;
-
+  timer t;
+  uint32_t startTime;
+  uint32_t endTime;
+  t :> startTime;
   leds <: ((k)%2);
 
     for(int i = 0; i < NUMCPUs; i++){
@@ -232,6 +235,11 @@ void distributor(chanend c_in, chanend c_out, chanend fromAcc, chanend workerCha
                         break;
                     }
                 }
+                if(k%100 == 0){
+                    t :> endTime;
+                    printf("Time for 100 generations: %d ms\n",(endTime - startTime) / 100000);
+                    startTime = endTime;
+                }
             }
             break;
       }
@@ -241,7 +249,7 @@ void distributor(chanend c_in, chanend c_out, chanend fromAcc, chanend workerCha
 
 
 
-int dealWithIt(int j, chanend c, uchar alteredGrid[IMHT][IMWD/8], uchar grid[IMHT][IMWD/8], int* linesReceived, int* lineToSend, int id){
+int dealWithIt(int j, streaming chanend c, uchar alteredGrid[IMHT][IMWD/8], uchar grid[IMHT][IMWD/8], int* linesReceived, int* lineToSend, int id){
     //printf("deal with it: start %d\n", id);
     for(int x = 0; x < IMWD / 8; x++){
         c :> alteredGrid[id][x];
@@ -304,7 +312,7 @@ int dealWithIt(int j, chanend c, uchar alteredGrid[IMHT][IMWD/8], uchar grid[IMH
 
 
 
-void initWorker(int CPUId, chanend c){
+void initWorker(int CPUId, streaming chanend c){
     printf("Worker: (%d): Start...\n", CPUId);
 
     int lineId;
@@ -377,7 +385,7 @@ void initWorker(int CPUId, chanend c){
     }
 }
 
-void DataOutStream(char outfname[], chanend c_in)
+void DataOutStream(char outfname[], streaming chanend c_in)
 {
   int res;
   uchar line[ IMWD ];
@@ -395,6 +403,9 @@ void DataOutStream(char outfname[], chanend c_in)
       //sync before printout
       int y;
       c_in :> y;
+      timer t;
+      uint32_t  startTime;
+      t :> startTime;
       for( int y = 0; y < IMHT; y++ ) {
         for( int x = 0; x < IMWD; x += 8 ) {
             uchar linePart;
@@ -413,6 +424,11 @@ void DataOutStream(char outfname[], chanend c_in)
       }
       //sync after printout
       c_in :> y;
+
+      uint32_t  endTime;
+      t :> endTime;
+      printf("Print out time: %d sec\n",(endTime - startTime) / 100000000);
+
   }
 
 
@@ -500,18 +516,19 @@ int main(void) {
 
   i2c_master_if i2c[1];               //interface to accelerometer
 
-  chan c_inIO, c_outIO, c_control;    //extend your channel definitions here
-  chan workerChans[NUMCPUs];
+  chan c_acc;
+  streaming chan c_inIO, c_outIO;    //extend your channel definitions here
+  streaming chan workerChans[NUMCPUs];
   chan buttonsChan;
-  chan fileSizeChan;
+
 
   par {
     //on tile[0]: readFileSize("test.pgm", fileSizeChan);
     on tile[0]: i2c_master(i2c, 1, p_scl, p_sda, 10);   //server thread providing accelerometer data
-    on tile[0]: accelerometer(i2c[0],c_control);        //client thread reading accelerometer data
-    on tile[0]: DataInStream("128x128.pgm", c_inIO);          //thread to read in a PGM image
+    on tile[0]: accelerometer(i2c[0],c_acc);        //client thread reading accelerometer data
+    on tile[0]: DataInStream("512x512.pgm", c_inIO);          //thread to read in a PGM image
     on tile[0]: DataOutStream("testout.pgm", c_outIO);       //thread to write out a PGM image
-    on tile[0]: distributor(c_inIO, c_outIO, c_control, workerChans, leds, buttonsChan, fileSizeChan);//thread to coordinate work on image
+    on tile[0]: distributor(c_inIO, c_outIO, c_acc, workerChans, leds, buttonsChan);//thread to coordinate work on image
     on tile[0]: buttonListener(buttons, buttonsChan);
     par (int i = 0; i < 2; i++){
         on tile[0]: initWorker(i, workerChans[i]);
