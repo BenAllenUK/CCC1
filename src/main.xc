@@ -8,9 +8,9 @@
 #include "pgmIO.h"
 #include "i2c.h"
 
-#define  IMHT 128                  //image height
-#define  IMWD 128                  //image width
-#define  NUMCPUs 10
+#define  IMHT 256
+#define  IMWD 256
+#define  NUMCPUs 6
 
 //#define DEBUG
 
@@ -146,7 +146,7 @@ void sendData(chanend c, uchar grid[IMHT][IMWD/8], int* lineToSend){
 int sentNextNoneEmptyLineUpdatingLineCounters(chanend workerChan, uchar grid[IMHT][IMWD / 8], uchar alteredGrid[IMHT][IMWD / 8], int* linesReceived, int* lineToSend){
     (*lineToSend)++;
 
-      while(gridDoesNotNeedProccessingAsItAndItsNeighboursAreEmpty(grid, lineToSend)==EMPTY && (lineToSend) < IMHT){
+      while(PERFORM_LINE_OPTIMIZATION == 1 && gridDoesNotNeedProccessingAsItAndItsNeighboursAreEmpty(grid, lineToSend)==EMPTY && (lineToSend) < IMHT){
           for(int x = 0; x < IMWD / 8; x++){
               alteredGrid[(*lineToSend)][x] = 0;
           }
@@ -168,8 +168,7 @@ void distributor(chanend c_in, chanend c_out, chanend fromAcc, chanend workerCha
   printf("Distributor: Start...\nDistributor: Waiting for button press\n");
   uchar val;
   uchar grids[2][IMHT][IMWD / 8];
-
-
+/*
   int btnResponse;
   buttonsChan  :> btnResponse;
 
@@ -181,6 +180,7 @@ void distributor(chanend c_in, chanend c_out, chanend fromAcc, chanend workerCha
 
   printf("Button Pressed\n");
 
+ */
   printf("Started reading image (Green light)\n");
 
   leds <: 4;
@@ -233,6 +233,7 @@ void distributor(chanend c_in, chanend c_out, chanend fromAcc, chanend workerCha
           case workerChans[int j] :> int lineID:
             int newRound = dealWithIt(j, workerChans[j], grids[(k+1)%2], grids[(k%2)], &linesReceived, &lineToSend, lineID);
             if(newRound==SERVER_FINISH_ROUND){
+                //printGrid(grids[(k+1)%2]);
                 linesReceived = 0;
                 lineToSend = -1;
                 k++;
@@ -567,7 +568,7 @@ int main(void) {
     //on tile[0]: readFileSize("test.pgm", fileSizeChan);
     on tile[0]: i2c_master(i2c, 1, p_scl, p_sda, 10);   //server thread providing accelerometer data
     on tile[0]: accelerometer(i2c[0],c_acc);        //client thread reading accelerometer data
-    on tile[0]: DataInStream("128-blank.pgm", c_inIO);          //thread to read in a PGM image
+    on tile[0]: DataInStream("256glider.pgm", c_inIO);          //thread to read in a PGM image
     on tile[0]: DataOutStream("testout.pgm", c_outIO);       //thread to write out a PGM image
     on tile[0]: distributor(c_inIO, c_outIO, c_acc, workerChans, leds, buttonsChan);//thread to coordinate work on image
     on tile[0]: buttonListener(buttons, buttonsChan);

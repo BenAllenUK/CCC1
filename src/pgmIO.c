@@ -18,6 +18,7 @@ int _openinpgm(char fname[], int width, int height)
 	}
 	//Strip off header
     fgets( str, 64, _INFP ); //Version: P5
+    fgets( str, 64, _INFP ); //comment
     fgets( str, 64, _INFP ); //width and height
     sscanf( str, "%d%d", &inwidth, &inheight );
     if( inwidth != width || inheight != height )
