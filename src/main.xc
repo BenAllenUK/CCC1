@@ -385,25 +385,30 @@ void initWorker(int CPUId, streaming chanend c){
 
 void DataOutStream(char outfname[], chanend c_in)
 {
-  int res;
-  uchar line[ IMWD ];
 
-  //Open PGM file
-  printf( "DataOutStream: Start...\n" );
-  res = _openoutpgm( outfname, IMWD, IMHT );
-  if( res ) {
-    printf( "DataOutStream:Error opening %s\n.", outfname );
-    return;
-  }
 
   //Compile each line of the image and write the image line-by-line
   while(1){
+
       //sync before printout
       int y;
       c_in :> y;
       timer t;
       uint32_t  startTime;
       t :> startTime;
+
+      int res;
+	  uchar line[ IMWD ];
+
+	  //Open PGM file
+	  printf( "DataOutStream: Start...\n" );
+	  res = _openoutpgm( outfname, IMWD, IMHT );
+	  if( res ) {
+		printf( "DataOutStream:Error opening %s\n.", outfname );
+		return;
+	  }
+
+
       for( int y = 0; y < IMHT; y++ ) {
         for( int x = 0; x < IMWD; x += 8 ) {
             uchar linePart;
@@ -432,14 +437,16 @@ void DataOutStream(char outfname[], chanend c_in)
       //sync after printout
       c_in :> y;
 
+      //Close the PGM image
+       _closeoutpgm();
+
       uint32_t  endTime;
       t :> endTime;
       printf("Print out time: %d sec\n",(endTime - startTime) / 100000000);
 
   }
 
-  //Close the PGM image
-  _closeoutpgm();
+
   printf( "DataOutStream:Done...\n" );
   return;
 }
