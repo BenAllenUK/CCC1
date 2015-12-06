@@ -107,7 +107,7 @@ void sendCurrentGameToOutStream(chanend c_out, uchar  grid[IMHT][IMWD/8]){
     printf("Finished writing\n");
 }
 
-void sendData(chanend c, uchar grid[IMHT][IMWD/8], int* lineToSend){
+void sendData(streaming chanend c, uchar grid[IMHT][IMWD/8], int* lineToSend){
     for(int x = 0; x < IMWD / 8; x++){
         c <: grid[(((*lineToSend) - 1 ) + IMHT)%IMHT][ x];
     }
@@ -181,7 +181,6 @@ void distributor(chanend c_in, chanend c_out, chanend fromAcc, streaming chanend
   leds <: ((k)%2);
 
     for(int i = 0; i < NUMCPUs; i++){
-        //printf("Pre Server: Sending initial data to core: %d\n", i);
         int tmp = sendNextNonEmptyLine(workerChans[i], grids[0], grids[1], &linesReceived, &lineToSend);
         if(tmp == WORKER_WAIT_FOR_NEXT_ROUND){
             break;
