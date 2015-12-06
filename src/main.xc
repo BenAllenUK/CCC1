@@ -328,6 +328,7 @@ void initWorker(int CPUId, streaming chanend c){
         for(int x = 0; x<IMWD; x++)
         {
             int l = (x-1+IMWD) % IMWD;
+            if()
             int r = (x+1) % IMWD;
             int shouldProcessBlock = 1;
             // If we are at a new char then
@@ -407,13 +408,24 @@ void DataOutStream(char outfname[], chanend c_in)
         for( int x = 0; x < IMWD; x += 8 ) {
             uchar linePart;
             c_in :> linePart;
-            for( int z = 0; z < 8; z++){
-                uchar newChar = (uchar)0;
-                if(((linePart >> (7 - z)) & 1) == 1){
-                    newChar = (uchar)(255);
-                }
-                line[x + z] = newChar;
+            if(IMWD-x < 8){
+                for( int z = 0; z < IMWD-x; z++){
+					uchar newChar = (uchar)0;
+					if(((linePart >> (7 - z)) & 1) == 1){
+						newChar = (uchar)(255);
+					}
+					line[x + z] = newChar;
+				}
+            }else{
+                for( int z = 0; z < 8; z++){
+					uchar newChar = (uchar)0;
+					if(((linePart >> (7 - z)) & 1) == 1){
+						newChar = (uchar)(255);
+					}
+					line[x + z] = newChar;
+				}
             }
+
         }
       _writeoutline( line, IMWD );
       }
