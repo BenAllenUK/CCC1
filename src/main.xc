@@ -47,10 +47,10 @@ on tile[0] : out port leds = XS1_PORT_4F;   //port to access xCore-200 LEDs
 #define PERFORM_LINE_OPTIMIZATION 1
 #define PERFORM_CHAR_OPTIMIZATION 1
 
-void initServer( chanend workers[NUMCPUs], uchar grid[IMHT][IMWD/8], int* linesReceived, int* lineToSend, uchar alteredGrid[IMHT][IMWD/8]);
-void initWorker(int CPUId, chanend c);
-int dealWithIt(int j, chanend c, uchar alteredGrid[IMHT][IMWD/8], uchar grid[IMHT][IMWD/8], int* linesReceived, int* lineToSend, int id);
-void sendData(chanend c, uchar grid[IMHT][IMWD/8], int* lineToSend);
+void initServer( streaming chanend workers[NUMCPUs], uchar grid[IMHT][IMWD/8], int* linesReceived, int* lineToSend, uchar alteredGrid[IMHT][IMWD/8]);
+void initWorker(int CPUId, streaming chanend c);
+int dealWithIt(int j, streaming chanend c, uchar alteredGrid[IMHT][IMWD/8], uchar grid[IMHT][IMWD/8], int* linesReceived, int* lineToSend, int id);
+void sendData(streaming chanend c, uchar grid[IMHT][IMWD/8], int* lineToSend);
 int gridDoesNotNeedProccessingAsItAndItsNeighboursAreEmpty(uchar grid[IMHT][IMWD/8], int* lineToSend);
 
 
@@ -328,7 +328,7 @@ void initWorker(int CPUId, streaming chanend c){
         for(int x = 0; x<IMWD; x++)
         {
             int l = (x-1+IMWD) % IMWD;
-            if()
+
             int r = (x+1) % IMWD;
             int shouldProcessBlock = 1;
             // If we are at a new char then
