@@ -126,7 +126,6 @@ int sendNextNonEmptyLine(streaming chanend workerChan, uchar grid[IMHT][IMWD / 8
           for(int x = 0; x < IMWD / 8; x++){
               alteredGrid[(*lineToSend)][x] = 0;
           }
-          //printf("Pre Server: Line is clear so didn't send\n");
           (*linesReceived)++;
           (*lineToSend)++;
       }
@@ -209,7 +208,6 @@ void distributor(chanend c_in, chanend c_out, chanend fromAcc, streaming chanend
           case workerChans[int j] :> int lineID:
             int newRound = dealWithIt(j, workerChans[j], grids[(k+1)%2], grids[(k%2)], &linesReceived, &lineToSend, lineID);
             if(newRound==SERVER_FINISH_ROUND){
-                //printGrid(grids[(k+1)%2]);
                 linesReceived = 0;
                 lineToSend = -1;
                 k++;
@@ -240,7 +238,6 @@ void distributor(chanend c_in, chanend c_out, chanend fromAcc, streaming chanend
 
 
 int dealWithIt(int j, streaming chanend c, uchar alteredGrid[IMHT][IMWD/8], uchar grid[IMHT][IMWD/8], int* linesReceived, int* lineToSend, int id){
-    //printf("deal with it: start %d\n", id);
     for(int x = 0; x < IMWD / 8; x++){
         c :> alteredGrid[id][x];
     }
@@ -248,24 +245,18 @@ int dealWithIt(int j, streaming chanend c, uchar alteredGrid[IMHT][IMWD/8], ucha
 
     if((*linesReceived) == IMHT){
         // Finished this cycle
-        //printf("Deal with it: finished image\n");
         c <: WORKER_WAIT_FOR_NEXT_ROUND;
         return SERVER_FINISH_ROUND;
-    }
-
-    if((*lineToSend)+1 >= IMHT) {
+    }else if((*lineToSend)+1 >= IMHT) {
         // Do nothing
-        //printf("Deal with it: no more image to send out\n");
         c <: WORKER_WAIT_FOR_NEXT_ROUND;
         return SERVER_CONTINUE;
     }else{
         (*lineToSend)++;
-
         while(PERFORM_LINE_OPTIMIZATION == 1 && gridDoesNotNeedProccessingAsItAndItsNeighboursAreEmpty(grid, lineToSend)==EMPTY && (*lineToSend) < IMHT){
             for(int x = 0; x < IMWD / 8; x++){
                 alteredGrid[(*lineToSend)][x] = 0;
             }
-            //printf("Deal with it: Line is clear so didn't send\n");
             (*linesReceived)++;
             (*lineToSend)++;
         }
@@ -273,7 +264,7 @@ int dealWithIt(int j, streaming chanend c, uchar alteredGrid[IMHT][IMWD/8], ucha
                // Finsih
                c <: WORKER_WAIT_FOR_NEXT_ROUND;
                return SERVER_FINISH_ROUND;
-           }
+        }
         if((*lineToSend) == IMHT) {
             // Do nothing
             c <: WORKER_WAIT_FOR_NEXT_ROUND;
@@ -513,16 +504,15 @@ int main(void) {
 
 
   par {
-    //on tile[0]: readFileSize("test.pgm", fileSizeChan);
     on tile[0]: i2c_master(i2c, 1, p_scl, p_sda, 10);   //server thread providing accelerometer data
     on tile[0]: accelerometer(i2c[0],c_acc);        //client thread reading accelerometer data
-    on tile[0]: DataInStream("128x128.pgm", c_inIO);          //thread to read in a PGM image
+    on tile[0]: DataInStream("test.pgm", c_inIO);          //thread to read in a PGM image
     on tile[0]: DataOutStream("testout.pgm", c_outIO);       //thread to write out a PGM image
     on tile[0]: distributor(c_inIO, c_outIO, c_acc, workerChans, leds, buttonsChan);//thread to coordinate work on image
     on tile[0]: buttonListener(buttons, buttonsChan);
     par (int i = 0; i < 2; i++){
             on tile[0]: initWorker(i, workerChans[i]);
-        }
+    }
     par (int i = 2; i < NUMCPUs; i++){
         on tile[1]: initWorker(i, workerChans[i]);
     }
