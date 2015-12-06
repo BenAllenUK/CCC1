@@ -51,10 +51,6 @@ int dealWithIt(int j, chanend c, uchar alteredGrid[IMHT][IMWD/8], uchar grid[IMH
 void sendData(chanend c, uchar grid[IMHT][IMWD/8], int* lineToSend);
 int gridDoesNotNeedProccessingAsItAndItsNeighboursAreEmpty(uchar grid[IMHT][IMWD/8], int* lineToSend);
 
-int indexer(int y, int x){
-    return y*IMWD + x;
-}
-
 void DataInStream(char infname[], chanend c_out)
 {
   timer t;
@@ -94,35 +90,13 @@ void DataInStream(char infname[], chanend c_out)
   return;
 }
 
-void printBin(uchar num){
-    for(int y = 0; y<8; y++){
-        printf("%d", ((num >> (7 - y)) & 1));
-    }
-
-}
-void printLine(uchar grid[IMWD / 8]){
-    for(int y = 0; y<IMWD / 8; y++){
-        printBin(grid[y]);
-    }
-    printf("\n");
-}
-void printGrid(uchar grid[IMHT][IMWD / 8]){
-    for(int x = 0; x<IMHT; x++){
-        for(int y = 0; y<IMWD / 8; y++){
-            printBin(grid[x][y]);
-        }
-        printf("\n");
-    }
-    printf("\n");
-}
-
 void sendCurrentGameToOutStream(chanend c_out, uchar  grid[IMHT][IMWD/8]){
     printf("Start writing\n");
     //syncronise printouts
     c_out <: 0;
-    for( int y = 0; y < IMHT; y++ ) {   //go through all lines
-        for( int x = 0; x < IMWD/8; x++ ) { //go through each pixel per line
-           c_out <: grid[y][x]; //send some modified pixel out
+    for( int y = 0; y < IMHT; y++ ) {
+        for( int x = 0; x < IMWD/8; x++ ) {
+           c_out <: grid[y][x];
         }
     }
     //syncronise printouts
@@ -131,7 +105,6 @@ void sendCurrentGameToOutStream(chanend c_out, uchar  grid[IMHT][IMWD/8]){
 }
 
 void sendData(chanend c, uchar grid[IMHT][IMWD/8], int* lineToSend){
-    //printf("sendData: sending data from line %d\n", *lineToSend);
     for(int x = 0; x < IMWD / 8; x++){
         c <: grid[(((*lineToSend) - 1 ) + IMHT)%IMHT][ x];
     }
@@ -143,7 +116,7 @@ void sendData(chanend c, uchar grid[IMHT][IMWD/8], int* lineToSend){
     }
 }
 
-int sentNextNoneEmptyLineUpdatingLineCounters(chanend workerChan, uchar grid[IMHT][IMWD / 8], uchar alteredGrid[IMHT][IMWD / 8], int* linesReceived, int* lineToSend){
+int sendNextNonEmptyLine(chanend workerChan, uchar grid[IMHT][IMWD / 8], uchar alteredGrid[IMHT][IMWD / 8], int* linesReceived, int* lineToSend){
     (*lineToSend)++;
 
       while(PERFORM_LINE_OPTIMIZATION == 1 && gridDoesNotNeedProccessingAsItAndItsNeighboursAreEmpty(grid, lineToSend)==EMPTY && (lineToSend) < IMHT){
@@ -168,7 +141,7 @@ void distributor(chanend c_in, chanend c_out, chanend fromAcc, chanend workerCha
   printf("Distributor: Start...\nDistributor: Waiting for button press\n");
   uchar val;
   uchar grids[2][IMHT][IMWD / 8];
-/*
+
   int btnResponse;
   buttonsChan  :> btnResponse;
 
@@ -180,7 +153,7 @@ void distributor(chanend c_in, chanend c_out, chanend fromAcc, chanend workerCha
 
   printf("Button Pressed\n");
 
- */
+
   printf("Started reading image (Green light)\n");
 
   leds <: 4;
@@ -205,7 +178,7 @@ void distributor(chanend c_in, chanend c_out, chanend fromAcc, chanend workerCha
 
     for(int i = 0; i < NUMCPUs; i++){
         //printf("Pre Server: Sending initial data to core: %d\n", i);
-        int tmp = sentNextNoneEmptyLineUpdatingLineCounters(workerChans[i], grids[0], grids[1], &linesReceived, &lineToSend);
+        int tmp = sendNextNonEmptyLine(workerChans[i], grids[0], grids[1], &linesReceived, &lineToSend);
         if(tmp == WORKER_WAIT_FOR_NEXT_ROUND){
             break;
         }
@@ -240,7 +213,7 @@ void distributor(chanend c_in, chanend c_out, chanend fromAcc, chanend workerCha
                 leds <: ((k)%2);
 
                 for(int i = 0; i < NUMCPUs; i++){
-                    int tmp = sentNextNoneEmptyLineUpdatingLineCounters(workerChans[i], grids[(k%2)], grids[(k+1)%2], &linesReceived, &lineToSend);
+                    int tmp = sendNextNonEmptyLine(workerChans[i], grids[(k%2)], grids[(k+1)%2], &linesReceived, &lineToSend);
                     if(tmp == WORKER_WAIT_FOR_NEXT_ROUND){
                         break;
                     }
@@ -329,7 +302,7 @@ int dealWithIt(int j, chanend c, uchar alteredGrid[IMHT][IMWD/8], uchar grid[IMH
 
 
 
-void initWorker(int CPUId, chanend c){
+void initWorker(int CPUId, streaming chanend c){
     printf("Worker: (%d): Start...\n", CPUId);
 
     int lineId;
@@ -341,10 +314,9 @@ void initWorker(int CPUId, chanend c){
 
 
         if(lineId==WORKER_WAIT_FOR_NEXT_ROUND){
-            //printf("Worker: WORKER_WAIT_FOR_NEXT_ROUND\n");
             continue;
         }
-        //printf("Worker: Before worker given new line data\n");
+        //read in data
         for(int x = 0; x < IMWD / 8; x++){
             c :> startLine[x];
         }
@@ -354,13 +326,7 @@ void initWorker(int CPUId, chanend c){
         for(int x = 0; x < IMWD / 8; x++){
             c :> endLine[x];
         }
-        //printf("Worker: After worker given new line data\n");
-
-
-
-
-
-
+        //clear space result for result
         for(int x = 0; x<IMWD/8; x++){
             newLine[x] = 0;
         }
@@ -373,17 +339,14 @@ void initWorker(int CPUId, chanend c){
             // If we are at a new char then
             if(x % 8 == 0 && PERFORM_CHAR_OPTIMIZATION == 1){
                 // Test to see whether any of the neighbours have values in them
-                int thisCharIndex = x / 8;
-                int prevCharIndex = ((x / 8) - 1 + (IMWD / 8)) % (IMWD / 8);
-                int nextCharIndex = ((x / 8) + 1 + (IMWD / 8)) % (IMWD / 8);
-//                printf("X T:%d \n", thisCharIndex);
-                int verticalNeighbours = ((startLine[thisCharIndex] >> 0) & 1);
-                verticalNeighbours += ((midLine[prevCharIndex] >> 0) & 1);
-                verticalNeighbours += ((endLine[prevCharIndex] >> 0) & 1);
+                int nextCharIndex = ((x / 8) + 1 ) % (IMWD / 8);
+                int verticalNeighbours
+                                    = ((startLine[l/8] >> 0) & 1);
+                verticalNeighbours += ((midLine[l/8] >> 0) & 1);
+                verticalNeighbours += ((endLine[l/8] >> 0) & 1);
                 verticalNeighbours += ((startLine[nextCharIndex] >> 7) & 1);
                 verticalNeighbours += ((midLine[nextCharIndex] >> 7) & 1);
                 verticalNeighbours += ((endLine[nextCharIndex] >> 7) & 1);
-//                printf("V: %d\n", verticalNeighbours);
                 // If neighbours dont have characters in them then
                 if(midLine[x/8] == 0 && startLine[x/8] == 0 && endLine[x/8] == 0 && verticalNeighbours == 0){
                     // Skip to next character block
@@ -416,14 +379,12 @@ void initWorker(int CPUId, chanend c){
                 }
             }
         }
-        //printf("Worker: finished line %d\n", lineId);
+        //send back line
         c <: lineId;
-        //printf("Worker: finished atfer send line %d\n", lineId);
 
         for(int x = 0; x < IMWD / 8; x++){
             c <: newLine[x];
         }
-        //printf("Worker: Sent results of line %d\n", lineId);
     }
 }
 
@@ -458,11 +419,9 @@ void DataOutStream(char outfname[], chanend c_in)
                     newChar = (uchar)(255);
                 }
                 line[x + z] = newChar;
-                //printf( "%s ", (char) (newChar!=255?"\u25A0":" ") );
             }
         }
-       // printf( "\n" );
-        _writeoutline( line, IMWD );
+      _writeoutline( line, IMWD );
       }
       //sync after printout
       c_in :> y;
@@ -472,8 +431,6 @@ void DataOutStream(char outfname[], chanend c_in)
       printf("Print out time: %d sec\n",(endTime - startTime) / 100000000);
 
   }
-
-
 
   //Close the PGM image
   _closeoutpgm();
@@ -560,7 +517,7 @@ int main(void) {
 
   chan c_acc;
   chan c_inIO, c_outIO;    //extend your channel definitions here
-  chan workerChans[NUMCPUs];
+  streaming chan workerChans[NUMCPUs];
   chan buttonsChan;
 
 
