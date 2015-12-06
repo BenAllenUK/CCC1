@@ -8,9 +8,9 @@
 #include "pgmIO.h"
 #include "i2c.h"
 
-#define  IMHT 16                  //image height
-#define  IMWD 16                  //image width
-#define  NUMCPUs 10
+#define  IMHT 128
+#define  IMWD 128
+#define  NUMCPUs 6
 
 //#define DEBUG
 
@@ -34,26 +34,29 @@ on tile[0] : out port leds = XS1_PORT_4F;   //port to access xCore-200 LEDs
 #define FXOS8700EQ_OUT_Z_MSB 0x5
 #define FXOS8700EQ_OUT_Z_LSB 0x6
 
-#define STOP_WORKER -1
-#define FINISH_SERVER -2
-#define CONTINUE_SERVER 1
+#define WORKER_WAIT_FOR_NEXT_ROUND -1
+#define SERVER_CONTINUE 1
+#define SERVER_FINISH_ROUND 0
+#define WORKER_SENT 1
 
-void initServer( chanend workers[NUMCPUs], uchar grid[IMHT][IMWD/8], int* linesReceived, int* lineToSend, uchar alteredGrid[IMHT][IMWD/8]);
-void initWorker(int CPUId, chanend c);
-void dealWithIt(int j, chanend c, uchar alteredGrid[IMHT][IMWD/8], uchar grid[IMHT][IMWD/8], int* linesReceived, int* lineToSend);
-void sendData(chanend c, uchar grid[IMHT][IMWD/8], int* lineToSend);
+#define EMPTY -1
+#define NOT_EMPTY 0
+
+void initServer( streaming chanend workers[NUMCPUs], uchar grid[IMHT][IMWD/8], int* linesReceived, int* lineToSend, uchar alteredGrid[IMHT][IMWD/8]);
+void initWorker(int CPUId, streaming chanend c);
+int dealWithIt(int j, streaming chanend c, uchar alteredGrid[IMHT][IMWD/8], uchar grid[IMHT][IMWD/8], int* linesReceived, int* lineToSend, int id);
+void sendData(streaming chanend c, uchar grid[IMHT][IMWD/8], int* lineToSend);
+int gridDoesNotNeedProccessingAsItAndItsNeighboursAreEmpty(uchar grid[IMHT][IMWD/8], int* lineToSend);
 
 int indexer(int y, int x){
     return y*IMWD + x;
 }
 
-/////////////////////////////////////////////////////////////////////////////////////////
-//
-// Read Image from PGM file from path infname[] to channel c_out
-//
-/////////////////////////////////////////////////////////////////////////////////////////
 void DataInStream(char infname[], chanend c_out)
 {
+  timer t;
+  uint32_t  startTime;
+  t :> startTime;
   int res;
   uchar line[ IMWD ];
   printf( "DataInStream: Start...\n" );
@@ -79,7 +82,9 @@ void DataInStream(char infname[], chanend c_out)
 
     }
   }
-
+  uint32_t  endTime;
+  t :> endTime;
+  printf("Read in time: %d sec\n",(endTime - startTime) / 100000000);
   //Close PGM image file
   _closeinpgm();
   printf( "DataInStream:Done...\n" );
@@ -103,117 +108,149 @@ void printGrid(uchar grid[IMHT][IMWD / 8]){
     printf("\n");
 }
 
-void distributor(chanend c_in, chanend c_out, chanend fromAcc, chanend workerChans[NUMCPUs], chanend ledDisplay, chanend btnPress)
+void sendCurrentGameToOutStream(chanend c_out, uchar  grid[IMHT][IMWD/8]){
+    printf("Start writing\n");
+    //syncronise printouts
+    c_out <: 0;
+    for( int y = 0; y < IMHT; y++ ) {   //go through all lines
+        for( int x = 0; x < IMWD/8; x++ ) { //go through each pixel per line
+           c_out <: grid[y][x]; //send some modified pixel out
+        }
+    }
+    //syncronise printouts
+    c_out <: 0;
+    printf("Finished writing\n");
+}
+
+void sendData(streaming chanend c, uchar grid[IMHT][IMWD/8], int* lineToSend){
+    //printf("sendData: sending data from line %d\n", *lineToSend);
+    for(int x = 0; x < IMWD / 8; x++){
+        c <: grid[(((*lineToSend) - 1 ) + IMHT)%IMHT][ x];
+    }
+    for(int x = 0; x < IMWD / 8; x++){
+        c <: grid[(((*lineToSend)) + IMHT)%IMHT][ x];
+    }
+    for(int x = 0; x < IMWD / 8; x++){
+        c <: grid[(((*lineToSend) + 1 ) + IMHT)%IMHT][ x];
+    }
+}
+
+int sentNextNoneEmptyLineUpdatingLineCounters(streaming chanend workerChan, uchar grid[IMHT][IMWD / 8], uchar alteredGrid[IMHT][IMWD / 8], int* linesReceived, int* lineToSend){
+    (*lineToSend)++;
+      while(gridDoesNotNeedProccessingAsItAndItsNeighboursAreEmpty(grid, lineToSend)==EMPTY && (lineToSend) < IMHT){
+          for(int x = 0; x < IMWD / 8; x++){
+              alteredGrid[(*lineToSend)][x] = 0;
+          }
+          //printf("Pre Server: Line is clear so didn't send\n");
+          (*linesReceived)++;
+          (*lineToSend)++;
+      }
+      if((*lineToSend) == IMHT) {
+          return WORKER_WAIT_FOR_NEXT_ROUND;
+      }
+
+      workerChan <: *lineToSend;
+      sendData(workerChan, grid, lineToSend);
+      return WORKER_SENT;
+}
+
+void distributor(chanend c_in, chanend c_out, chanend fromAcc, streaming chanend workerChans[NUMCPUs], out port leds, chanend buttonsChan)
 {
+  printf("Distributor: Start...\nDistributor: Waiting for button press\n");
   uchar val;
   uchar grids[2][IMHT][IMWD / 8];
 
+
   int btnResponse;
-  btnPress :> btnResponse;
+  buttonsChan  :> btnResponse;
 
   // Halt processing till button press
   while(btnResponse != 13){
-      btnPress :> btnResponse;
+      printf("Wrong button\n");
+      buttonsChan  :> btnResponse;
   }
 
-  //Starting up and wait for tilting of the xCore-200 Explorer
-  printf( "ProcessImage:Start, size = %dx%d\n", IMHT, IMWD );
-  printf( "Waiting for Board Tilt...\n" );
+  printf("Button Pressed\n");
 
-  //Read in and do something with your image values..
-  //This just inverts every pixel, but you should
-  //change the image according to the "Game of Life"
-  printf( "Processing...\n" );
-  ledDisplay <: 4;
+  printf("Started reading image (Green light)\n");
+
+  leds <: 4;
+
   for( int y = 0; y < IMHT; y++) {
     for( int x = 0; x < IMWD/8; x++) {
       c_in :> val;
       grids[0][y][ x] = val;
     }
   }
+  printf("Finished reading image\n");
 
-  printf("Original\n");
-
-  for( int y = 0; y < IMHT; y++) {   //go through all lines
-      for( int x = 0; x < IMWD/8; x++) { //go through each pixel per line
-             c_out <: grids[0][y][x]; //send some modified pixel out
-      }
-    }
-
+  printf( "Processing image:, size = %dx%d\n", IMHT, IMWD );
   int k = 0;
-  while(1){
-      int linesReceived = 0;
-      int lineToSend = -1;
-      ledDisplay <: (k%2) << 3;
-      initServer(workerChans, grids[k%2] , &linesReceived, &lineToSend, grids[1 - k%2]);
-      int btnVal;
+  int linesReceived = 0;
+  int lineToSend = -1;
+  timer t;
+  uint32_t startTime;
+  uint32_t endTime;
+  t :> startTime;
+  leds <: ((k)%2);
 
-      // Accelermeter Pause
-      int accResponse;
-      fromAcc :> accResponse;
-      while(accResponse > 10){
-          fromAcc :> accResponse;
-          ledDisplay <: 8;
-      }
-
-
-
-      // Button read
-      btnPress :> btnVal;
-      if(btnVal == 14){
-        //print out and then carry on.
-        ledDisplay <: 2;
-
-        printf("Updated\n");
-        //sychronise
-        c_out <: 0;
-        for( int y = 0; y < IMHT; y++ ) {   //go through all lines
-            for( int x = 0; x < IMWD/8; x++ ) { //go through each pixel per line
-               c_out <: grids[1 - k%2][y][x]; //send some modified pixel out
-            }
-        }
-      }
-
-      k++;
-  }
-
-  c_out <: -1;
-
-}
-
-void initServer(chanend workers[NUMCPUs], uchar  grid[IMHT][IMWD/8], int* linesReceived, int* lineToSend, uchar alteredGrid[IMHT][IMWD/8]){
     for(int i = 0; i < NUMCPUs; i++){
-          (*lineToSend)++;
-          workers[i] <: (*lineToSend);
-          for(int x = 0; x < IMWD / 8; x++){
-              workers[i] <: grid[((*lineToSend) - 1 ) & (16-1)][ x];
-          }
-          for(int x = 0; x < IMWD / 8; x++){
-              workers[i] <: grid[((*lineToSend)) & (16-1)][x];
-          }
-          for(int x = 0; x < IMWD / 8; x++){
-              workers[i] <: grid[((*lineToSend) + 1 ) & (16-1)][x];
-          }
-      }
-
-
-    int running = 1;
-    while(running){
-        select {
-            case workers[int j] :> int stopFlag:
-                if(stopFlag == STOP_WORKER){
-                    running = 0;
-                } else {
-                    dealWithIt(j, workers[j], alteredGrid, grid, linesReceived, lineToSend);
-                }
-                break;
+        //printf("Pre Server: Sending initial data to core: %d\n", i);
+        int tmp = sentNextNoneEmptyLineUpdatingLineCounters(workerChans[i], grids[0], grids[1], &linesReceived, &lineToSend);
+        if(tmp == WORKER_WAIT_FOR_NEXT_ROUND){
+            break;
         }
     }
+
+  while(1){
+      [[ordered]]
+      select {
+          case buttonsChan :> int btnVal:
+              if(btnVal == 14){
+                  printf("Iteration: %d\n", k);
+                  leds <: 2;
+                  sendCurrentGameToOutStream(c_out, grids[k%2]);
+              }else{
+                  printf("Wrong button\n");
+              }
+              break;
+          case fromAcc :> int accResponse:
+              printf("Board Tilted\n");
+              leds <: 8;
+              fromAcc :> accResponse;
+              printf("Board level\n");
+              break;
+          case workerChans[int j] :> int lineID:
+            int newRound = dealWithIt(j, workerChans[j], grids[(k+1)%2], grids[(k%2)], &linesReceived, &lineToSend, lineID);
+            if(newRound==SERVER_FINISH_ROUND){
+
+                linesReceived = 0;
+                lineToSend = -1;
+                k++;
+                leds <: ((k)%2);
+
+                for(int i = 0; i < NUMCPUs; i++){
+                    int tmp = sentNextNoneEmptyLineUpdatingLineCounters(workerChans[i], grids[(k%2)], grids[(k+1)%2], &linesReceived, &lineToSend);
+                    if(tmp == WORKER_WAIT_FOR_NEXT_ROUND){
+                        break;
+                    }
+                }
+                if(k%100 == 0){
+                    t :> endTime;
+                    printf("Time for 100 generations: %d ms\n",(endTime - startTime) / 100000);
+                    startTime = endTime;
+                }
+            }
+            break;
+      }
+
+   }
 }
 
-void dealWithIt(int j, chanend c, uchar alteredGrid[IMHT][IMWD/8], uchar grid[IMHT][IMWD/8], int* linesReceived, int* lineToSend){
-    int id;
-    c :> id;
+
+
+int dealWithIt(int j, streaming chanend c, uchar alteredGrid[IMHT][IMWD/8], uchar grid[IMHT][IMWD/8], int* linesReceived, int* lineToSend, int id){
+    //printf("deal with it: start %d\n", id);
     for(int x = 0; x < IMWD / 8; x++){
         c :> alteredGrid[id][x];
     }
@@ -221,37 +258,76 @@ void dealWithIt(int j, chanend c, uchar alteredGrid[IMHT][IMWD/8], uchar grid[IM
 
     if((*linesReceived) == IMHT){
         // Finished this cycle
-        c <: FINISH_SERVER;
-    }else if((*lineToSend)+1 == IMHT) {
+        //printf("Deal with it: finished image\n");
+        c <: WORKER_WAIT_FOR_NEXT_ROUND;
+        return SERVER_FINISH_ROUND;
+    }
+
+    if((*lineToSend)+1 >= IMHT) {
         // Do nothing
-        c <: STOP_WORKER;
+        //printf("Deal with it: no more image to send out\n");
+        c <: WORKER_WAIT_FOR_NEXT_ROUND;
+        return SERVER_CONTINUE;
     }else{
         (*lineToSend)++;
+        while(gridDoesNotNeedProccessingAsItAndItsNeighboursAreEmpty(grid, lineToSend)==EMPTY && (*lineToSend) < IMHT){
+            for(int x = 0; x < IMWD / 8; x++){
+                alteredGrid[(*lineToSend)][x] = 0;
+            }
+            //printf("Deal with it: Line is clear so didn't send\n");
+            (*linesReceived)++;
+            (*lineToSend)++;
+        }
+        if((*linesReceived) == IMHT) {
+               // Finsih
+               c <: WORKER_WAIT_FOR_NEXT_ROUND;
+               return SERVER_FINISH_ROUND;
+           }
+        if((*lineToSend) == IMHT) {
+            // Do nothing
+            c <: WORKER_WAIT_FOR_NEXT_ROUND;
+            return SERVER_CONTINUE;
+        }
+
         c <: (*lineToSend);
         sendData(c, grid, lineToSend);
-
+        return SERVER_CONTINUE;
     }
 }
 
-void sendData(chanend c, uchar grid[IMHT][IMWD/8], int* lineToSend){
-    for(int x = 0; x < IMWD / 8; x++){
-        c <: grid[(*lineToSend - 1 ) & (16-1)][ x];
-    }
-    for(int x = 0; x < IMWD / 8; x++){
-        c <: grid[(*lineToSend) & (16-1)][ x];
-    }
-    for(int x = 0; x < IMWD / 8; x++){
-        c <: grid[(*lineToSend + 1 ) & (16-1)][ x];
-    }
-}
+ int gridDoesNotNeedProccessingAsItAndItsNeighboursAreEmpty(uchar grid[IMHT][IMWD/8], int* lineToSend){
+     for(int x = 0; x < IMWD / 8; x++){
+         if(grid[(((*lineToSend) - 1 ) + IMHT)%IMHT][x] != 0){
+             return NOT_EMPTY;
+         }
+         if(grid[(((*lineToSend)) + IMHT)%IMHT][x] != 0){
+             return NOT_EMPTY;
+         }
+         if(grid[(((*lineToSend) + 1 ) + IMHT)%IMHT][x] != 0){
+             return NOT_EMPTY;
+         }
+     }
+     return EMPTY;
+ }
 
-void initWorker(int CPUId, chanend c){
+
+
+void initWorker(int CPUId, streaming chanend c){
+    printf("Worker: (%d): Start...\n", CPUId);
+
+    int lineId;
+    uchar startLine[IMWD / 8], midLine[IMWD / 8], endLine[IMWD / 8], newLine[IMWD / 8];
+
     while(1){
-        int lineId;
-        uchar startLine[IMWD / 8], midLine[IMWD / 8], endLine[IMWD / 8], newLine[IMWD / 8];
 
         c :> lineId;
 
+
+        if(lineId==WORKER_WAIT_FOR_NEXT_ROUND){
+            //printf("Worker: WORKER_WAIT_FOR_NEXT_ROUND\n");
+            continue;
+        }
+        //printf("Worker: Before worker given new line data\n");
         for(int x = 0; x < IMWD / 8; x++){
             c :> startLine[x];
         }
@@ -261,70 +337,51 @@ void initWorker(int CPUId, chanend c){
         for(int x = 0; x < IMWD / 8; x++){
             c :> endLine[x];
         }
-
-        int started = 1;
-        while(started){
-            for(int x = 0; x<IMWD/8; x++){
-                newLine[x] = 0;
-            }
-
-            for(int x = 0; x<IMWD; x++)
-            {
-                int l = (x-1+IMWD) % IMWD;
-                int r = (x+1) % IMWD;
-                int neighbours =
-                  ((midLine[l/8] >> (7 - (l%8)) ) & 1)
-                + ((midLine[r/8] >> (7 - (r%8)) ) & 1)
-                + ((startLine[l/8] >> (7 - (l%8)) ) & 1)
-                + ((startLine[r/8] >> (7 - (r%8)) ) & 1)
-                + ((startLine[x/8] >> (7 - (x%8)) ) & 1)
-                + ((endLine[l/8] >> (7 - (l%8)) ) & 1)
-                + ((endLine[r/8] >> (7 - (r%8)) ) & 1)
-                + ((endLine[x/8] >> (7 - (x%8)) ) & 1);
-                int living = ((midLine[x/8] >> (7 - (x%8)) ) & 1);
-
-                if(living==1){
-                    if(neighbours==2 || neighbours==3){
-                       newLine[x/8] += (1 << (7-(x%8)));
-                    }
-                }else if((living!=1)){
-                    if(neighbours == 3){
-                        newLine[x/8] += (1 << (7-(x%8)));
-                    }
-                }
-            }
-
-            c <: CONTINUE_SERVER;
-
-            c <: lineId;
-            for(int x = 0; x < IMWD / 8; x++){
-                c <: newLine[x];
-            }
-
-            c :> lineId;
+        //printf("Worker: After worker given new line data\n");
 
 
-            if(lineId==-1){
-                started = 0;
 
-                break;
-            }else if(lineId==FINISH_SERVER){
-                c <: -1;
 
-                break;
-            }
-            for(int x = 0; x < IMWD / 8; x++){
-                c :> startLine[x];
-            }
-            for(int x = 0; x < IMWD / 8; x++){
-                c :> midLine[x];
-            }
-            for(int x = 0; x < IMWD / 8; x++){
-                c :> endLine[x];
-            }
 
+
+        for(int x = 0; x<IMWD/8; x++){
+            newLine[x] = 0;
         }
 
+        for(int x = 0; x<IMWD; x++)
+        {
+
+            int l = (x-1+IMWD) % IMWD;
+            int r = (x+1) % IMWD;
+            int neighbours =
+              ((midLine[l/8] >> (7 - (l%8)) ) & 1)
+            + ((midLine[r/8] >> (7 - (r%8)) ) & 1)
+            + ((startLine[l/8] >> (7 - (l%8)) ) & 1)
+            + ((startLine[r/8] >> (7 - (r%8)) ) & 1)
+            + ((startLine[x/8] >> (7 - (x%8)) ) & 1)
+            + ((endLine[l/8] >> (7 - (l%8)) ) & 1)
+            + ((endLine[r/8] >> (7 - (r%8)) ) & 1)
+            + ((endLine[x/8] >> (7 - (x%8)) ) & 1);
+            int living = ((midLine[x/8] >> (7 - (x%8)) ) & 1);
+
+            if(living==1){
+                if(neighbours==2 || neighbours==3){
+                   newLine[x/8] += (1 << (7-(x%8)));
+                }
+            }else if((living!=1)){
+                if(neighbours == 3){
+                    newLine[x/8] += (1 << (7-(x%8)));
+                }
+            }
+        }
+        //printf("Worker: finished line %d\n", lineId);
+        c <: lineId;
+        //printf("Worker: finished atfer send line %d\n", lineId);
+
+        for(int x = 0; x < IMWD / 8; x++){
+            c <: newLine[x];
+        }
+        //printf("Worker: Sent results of line %d\n", lineId);
     }
 }
 
@@ -334,7 +391,7 @@ void DataOutStream(char outfname[], chanend c_in)
   uchar line[ IMWD ];
 
   //Open PGM file
-  printf( "DataOutStream:Start...\n" );
+  printf( "DataOutStream: Start...\n" );
   res = _openoutpgm( outfname, IMWD, IMHT );
   if( res ) {
     printf( "DataOutStream:Error opening %s\n.", outfname );
@@ -343,6 +400,12 @@ void DataOutStream(char outfname[], chanend c_in)
 
   //Compile each line of the image and write the image line-by-line
   while(1){
+      //sync before printout
+      int y;
+      c_in :> y;
+      timer t;
+      uint32_t  startTime;
+      t :> startTime;
       for( int y = 0; y < IMHT; y++ ) {
         for( int x = 0; x < IMWD; x += 8 ) {
             uchar linePart;
@@ -353,18 +416,19 @@ void DataOutStream(char outfname[], chanend c_in)
                     newChar = (uchar)(255);
                 }
                 line[x + z] = newChar;
-                printf( "-%4.1d ", newChar );
+                //printf( "%s ", (char) (newChar!=255?"\u25A0":" ") );
             }
-            printf( " " );
         }
-        printf( "\n" );
+       // printf( "\n" );
         _writeoutline( line, IMWD );
       }
-      int y;
+      //sync after printout
       c_in :> y;
-      if(y == -1){
-          break;
-      }
+
+      uint32_t  endTime;
+      t :> endTime;
+      printf("Print out time: %d sec\n",(endTime - startTime) / 100000000);
+
   }
 
 
@@ -376,9 +440,9 @@ void DataOutStream(char outfname[], chanend c_in)
 }
 
 void accelerometer(client interface i2c_master_if i2c, chanend toDist) {
-    toDist <: 1;
-  i2c_regop_res_t result;
-  char status_data = 0;
+    i2c_regop_res_t result;
+    char status_data = 0;
+
 
 
   // Configure FXOS8700EQ
@@ -405,55 +469,60 @@ void accelerometer(client interface i2c_master_if i2c, chanend toDist) {
     int x = read_acceleration(i2c, FXOS8700EQ_OUT_X_MSB);
 
     //send signal to distributor after first tilt
-    toDist <: x;
+    if (x>30) {
+        toDist <: x;
+
+      do {
+          do {
+                status_data = i2c.read_reg(FXOS8700EQ_I2C_ADDR, FXOS8700EQ_DR_STATUS, result);
+              } while (!status_data & 0x08);
+
+              //get new x-axis tilt value
+              x = read_acceleration(i2c, FXOS8700EQ_OUT_X_MSB);
+      } while (x>30);
+
+      printf("Acc: flat");
+      toDist <: x;
+
+    }
   }
 }
 
-int showLEDs(out port p, chanend fromVisualiser) {
-  int pattern; //1st bit...separate green LED
-               //2nd bit...blue LED
-               //3rd bit...green LED
-               //4th bit...red LED
-  while (1) {
-    fromVisualiser :> pattern;   //receive new pattern from visualiser
-    p <: pattern;                //send pattern to LED port
-  }
-  return 0;
-}
-
-void buttonListener(in port b, chanend responseChan) {
+void buttonListener(in port b, chanend toUserAnt) {
   int r;
   while (1) {
     b when pinseq(15)  :> r;    // check that no button is pressed
-    b when pinsneq(15) :> r;    // check if some buttons are pressed// if either button is pressed
-    responseChan <: r;             // send button pattern to userAnt
+    b when pinsneq(15) :> r;    // check if some buttons are pressed
+    if ((r==13) || (r==14))     // if either button is pressed
+    toUserAnt <: r;             // send button pattern to userAnt
   }
 }
+
+
 
 int main(void) {
 
   i2c_master_if i2c[1];               //interface to accelerometer
 
-//  char infname[] = "test.pgm";     //put your input image path here
-//  char outfname[] = "testout.pgm"; //put your output image path here
+  chan c_acc;
+  chan c_inIO, c_outIO;    //extend your channel definitions here
+  streaming chan workerChans[NUMCPUs];
+  chan buttonsChan;
 
-  chan c_inIO, c_outIO, c_control;    //extend your channel definitions here
-  chan workerChans[NUMCPUs];
-  chan buttonPress, ledDisplay;
 
   par {
+    //on tile[0]: readFileSize("test.pgm", fileSizeChan);
     on tile[0]: i2c_master(i2c, 1, p_scl, p_sda, 10);   //server thread providing accelerometer data
-    on tile[0]: accelerometer(i2c[0],c_control);        //client thread reading accelerometer data
-    on tile[0]: DataInStream("test.pgm", c_inIO);          //thread to read in a PGM image
+    on tile[0]: accelerometer(i2c[0],c_acc);        //client thread reading accelerometer data
+    on tile[0]: DataInStream("128x128.pgm", c_inIO);          //thread to read in a PGM image
     on tile[0]: DataOutStream("testout.pgm", c_outIO);       //thread to write out a PGM image
-    on tile[0]: distributor(c_inIO, c_outIO, c_control, workerChans, ledDisplay, buttonPress);//thread to coordinate work on image
-    on tile[0]: buttonListener(buttons, buttonPress);
-    on tile[0]: showLEDs(leds, ledDisplay);
+    on tile[0]: distributor(c_inIO, c_outIO, c_acc, workerChans, leds, buttonsChan);//thread to coordinate work on image
+    on tile[0]: buttonListener(buttons, buttonsChan);
     par (int i = 0; i < 2; i++){
-        on tile[0]: initWorker(i, workerChans[i]);
-    }
-    par (int i = 0; i < 8; i++){
-        on tile[1]: initWorker(i+2, workerChans[i+2]);
+            on tile[0]: initWorker(i, workerChans[i]);
+        }
+    par (int i = 2; i < NUMCPUs; i++){
+        on tile[1]: initWorker(i, workerChans[i]);
     }
   }
 
