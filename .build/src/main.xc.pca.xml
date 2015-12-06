@@ -24,6 +24,7 @@
 <fDef name="operation_complete" global="true" interface="i2c_master_async_if" noreturn="false" doNotSpecialize="false" numParams="0"/>
 <fDef name="printBin" global="true" noreturn="false" doNotSpecialize="false" numParams="1"/>
 <fDef name="printGrid" global="true" noreturn="false" doNotSpecialize="false" numParams="1"/>
+<fDef name="printLine" global="true" noreturn="false" doNotSpecialize="false" numParams="1"/>
 <fDef name="read" global="true" interface="i2c_master_async_if" noreturn="false" doNotSpecialize="false" numParams="3"/>
 <fDef name="read" global="true" interface="i2c_master_if" noreturn="false" doNotSpecialize="false" numParams="4"/>
 <fDef name="read_reg" global="true" interface="i2c_master_if" noreturn="false" doNotSpecialize="true" numParams="4"/>
@@ -466,12 +467,20 @@
   </arg>
   <arg num="1">
     <values>
+<<<<<<< HEAD
       <value type="intval"><intval isSigned="true" val="128"/></value>
+=======
+      <value type="intval"><intval isSigned="true" val="256"/></value>
+>>>>>>> refs/heads/GiantSwitch
     </values>
   </arg>
   <arg num="2">
     <values>
+<<<<<<< HEAD
       <value type="intval"><intval isSigned="true" val="128"/></value>
+=======
+      <value type="intval"><intval isSigned="true" val="256"/></value>
+>>>>>>> refs/heads/GiantSwitch
     </values>
   </arg>
 </fCall>
@@ -495,7 +504,11 @@
   </arg>
   <arg num="1">
     <values>
+<<<<<<< HEAD
       <value type="intval"><intval isSigned="true" val="128"/></value>
+=======
+      <value type="intval"><intval isSigned="true" val="256"/></value>
+>>>>>>> refs/heads/GiantSwitch
     </values>
   </arg>
 </fCall>
@@ -527,6 +540,20 @@
     </values>
   </arg>
   <arg num="1">
+    <values>
+      <value type="unknown"/>
+    </values>
+  </arg>
+</fCall>
+<fCall name="printBin" global="true" numArgs="1">
+  <arg num="0">
+    <values>
+      <value type="unknown"/>
+    </values>
+  </arg>
+</fCall>
+<fCall name="printf" global="true" numArgs="1">
+  <arg num="0">
     <values>
       <value type="unknown"/>
     </values>
@@ -617,20 +644,6 @@
     </values>
   </arg>
 </fCall>
-<fCall name="printf" global="true" numArgs="1">
-  <arg num="0">
-    <values>
-      <value type="unknown"/>
-    </values>
-  </arg>
-</fCall>
-<fCall name="printf" global="true" numArgs="1">
-  <arg num="0">
-    <values>
-      <value type="unknown"/>
-    </values>
-  </arg>
-</fCall>
 <fCall name="printf" global="true" numArgs="3">
   <arg num="0">
     <values>
@@ -639,12 +652,20 @@
   </arg>
   <arg num="1">
     <values>
+<<<<<<< HEAD
       <value type="intval"><intval isSigned="true" val="128"/></value>
+=======
+      <value type="intval"><intval isSigned="true" val="256"/></value>
+>>>>>>> refs/heads/GiantSwitch
     </values>
   </arg>
   <arg num="2">
     <values>
+<<<<<<< HEAD
       <value type="intval"><intval isSigned="true" val="128"/></value>
+=======
+      <value type="intval"><intval isSigned="true" val="256"/></value>
+>>>>>>> refs/heads/GiantSwitch
     </values>
   </arg>
 </fCall>
@@ -852,12 +873,20 @@
   </arg>
   <arg num="1">
     <values>
+<<<<<<< HEAD
       <value type="intval"><intval isSigned="true" val="128"/></value>
+=======
+      <value type="intval"><intval isSigned="true" val="256"/></value>
+>>>>>>> refs/heads/GiantSwitch
     </values>
   </arg>
   <arg num="2">
     <values>
+<<<<<<< HEAD
       <value type="intval"><intval isSigned="true" val="128"/></value>
+=======
+      <value type="intval"><intval isSigned="true" val="256"/></value>
+>>>>>>> refs/heads/GiantSwitch
     </values>
   </arg>
 </fCall>
@@ -881,7 +910,11 @@
   </arg>
   <arg num="1">
     <values>
+<<<<<<< HEAD
       <value type="intval"><intval isSigned="true" val="128"/></value>
+=======
+      <value type="intval"><intval isSigned="true" val="256"/></value>
+>>>>>>> refs/heads/GiantSwitch
     </values>
   </arg>
 </fCall>
