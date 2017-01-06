@@ -1,4 +1,4 @@
-# Concurrent Computing Coursework 1
+# Cellular Automaton Farm
 The British mathematician John Horton Conway
 devised a cellular automaton named ‘The Game of Life’. The "Game"
 resides on a 2-valued 2D matrix, i.e. a binary image, where the
